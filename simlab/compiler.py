@@ -1,0 +1,192 @@
+"""Strict, documented execution subset of the full editable schema."""
+import math
+from .schema import TABLES, value, effective
+from .validation import validate
+
+SUPPORTED = {
+    'System': {'SID', 'FRT'},
+    'Item': {'IID', 'FRT', 'OPID', 'TYPE', 'AFFRT', 'CRIT', 'TRACK'},
+    'MaterielStructure': {'MID', 'MMID', 'QTYPM', 'ENVF'},
+    'Station': {'STID', 'TYPE', 'XCOORD', 'YCOORD', 'LEVL', 'LINDX'},
+    'StationStructure': {'STID', 'MSTID', 'TFRMS', 'TTOMS'},
+    'Unit': {'UNID', 'STID'},
+    'SystemDeployment': {'SID', 'USTID', 'QTYPS', 'UTIL'},
+    'StockAllocation': {'POINT', 'IID', 'STID', 'STSIZ', 'ISTOH'},
+    'ItemRepair': {'IID', 'STID', 'DIRPT', 'DIRPTID', 'DIRPD'},
+    'ItemReplacement': {'MID', 'IID', 'STID', 'SURPT', 'SURPTID', 'SURPD'},
+    'Resource': {'RID', 'TYPE'},
+    'ResourceAllocation': {'POINT', 'RID', 'STID', 'RQTY'},
+    'Tasks': {'TID'},
+    'TaskResource': {'TID', 'RID', 'QTY'},
+    'Control': {'NREPS', 'SIMPE', 'RSEED', 'APID', 'RCINT', 'RMVFR', 'ENLOG',
+                'ENPM', 'ENLAT', 'ENALU', 'RELOP'},
+}
+DOCUMENTARY = {'DESCR', 'NOTE', 'UTXT1', 'UTXT2'}
+
+class ModelError(ValueError):
+    def __init__(self, errors):
+        self.errors = errors
+        super().__init__('\n'.join(errors))
+
+def equal(a, b):
+    if str(a) == str(b):
+        return True
+    try:
+        return float(a) == float(b)
+    except (ValueError, TypeError):
+        return False
+
+def capability_errors(tables):
+    errors = []
+    for name, rows in tables.items():
+        if not rows:
+            continue
+        if name not in SUPPORTED:
+            errors.append(f'{name}: 支持建模与交换，当前引擎尚不支持计算此表。')
+            continue
+        for i, row in enumerate(rows, 1):
+            for field in TABLES[name]:
+                column = field['id']
+                val = row.get(column, '')
+                if val not in ('', None) and column not in SUPPORTED[name] | DOCUMENTARY:
+                    if not equal(val, field['default']):
+                        # Zero direct system-independent values are harmless only here.
+                        if name == 'ItemRepair' and column == 'SURPT' and equal(val, '0'):
+                            continue
+                        errors.append(f'{name} 第 {i} 行.{column}: 当前引擎不支持此非默认设置。')
+    return errors
+
+def compile_model(tables):
+    errors = validate(tables)
+    if errors:
+        raise ModelError(errors)
+    errors = capability_errors(tables)
+    if errors:
+        raise ModelError(errors)
+    def rows(t): return tables.get(t, [])
+    def val(t, row, col, fallback=''): return value(t, row, col, fallback)
+    def num(t, row, col, fallback='0'): return float(val(t, row, col, fallback))
+    if len(rows('Control')) != 1:
+        raise ModelError(['Control: 需要且只能有一行仿真控制参数。'])
+    c = rows('Control')[0]
+    horizon, interval = num('Control', c, 'SIMPE'), num('Control', c, 'RCINT')
+    reps = int(num('Control', c, 'NREPS'))
+    try:
+        seed = int(val('Control', c, 'RSEED'))
+        if seed < 0 or seed > 2**128-1:
+            raise ValueError()
+    except ValueError:
+        errors.append('Control.RSEED: 本引擎需要 0 至 2^128-1 的整数种子。')
+        seed = 0
+    if reps > 1000 or horizon > 876000 or math.ceil(horizon / interval) > 10000:
+        errors.append('运行规模超限：重复次数≤1000，时长≤876000小时，采样点≤10000。')
+    for flag in ('ENPM', 'ENLAT', 'ENALU'):
+        if val('Control', c, flag) != 'N':
+            errors.append(f'Control.{flag}: 本引擎暂不支持，请设为 N。')
+    if val('Control', c, 'RELOP') != 'SERIAL':
+        errors.append('Control.RELOP: 本引擎支持 SERIAL 串联系统。')
+    systems = {r['SID']: r for r in rows('System')}
+    items = {r['IID']: r for r in rows('Item')}
+    stations = {r['STID']: r for r in rows('Station')}
+    units = {r['UNID']: r['STID'] for r in rows('Unit')}
+    resources = {r['RID']: r for r in rows('Resource')}
+    for sid, row in systems.items():
+        if num('System', row, 'FRT') != 0:
+            errors.append(f'System.{sid}.FRT: 本版使用部件故障，请将系统独立故障率设为 0。')
+    for iid, row in items.items():
+        if val('Item', row, 'TYPE') != 'LRU' or val('Item', row, 'OPID') != 'OPHOURS' or num('Item', row, 'CRIT') != 1:
+            errors.append(f'Item.{iid}: 本版支持 TYPE=LRU、OPID=OPHOURS、CRIT=1。')
+    for rid, row in resources.items():
+        if val('Resource', row, 'TYPE') != 'SPECIAL':
+            errors.append(f'Resource.{rid}: 本版支持固定数量 SPECIAL 资源。')
+    links = {}
+    for row in rows('StationStructure'):
+        child, parent = row['STID'], row['MSTID']
+        if child in links:
+            errors.append(f'StationStructure.{child}: 本版仅支持一个上级站点。')
+        links[child] = {'parent': parent, 'inward': num('StationStructure', row, 'TFRMS'),
+                        'outward': num('StationStructure', row, 'TTOMS')}
+    for child, link in links.items():
+        if child == link['parent'] or link['parent'] in links:
+            errors.append(f'StationStructure.{child}: 本版支持两级无环保障网络。')
+    point = val('Control', c, 'APID')
+    stock = {}
+    for row in rows('StockAllocation'):
+        if row['POINT'] == point:
+            stock[(row['STID'], row['IID'])] = int(num('StockAllocation', row, 'ISTOH', val('StockAllocation', row, 'STSIZ')))
+    capacity = {}
+    for row in rows('ResourceAllocation'):
+        if row['POINT'] == point:
+            qty = num('ResourceAllocation', row, 'RQTY')
+            if not qty.is_integer():
+                errors.append('ResourceAllocation.RQTY: 本引擎需要整数资源数量。')
+            capacity[(row['STID'], row['RID'])] = int(qty)
+    tasks = {}
+    for row in rows('TaskResource'):
+        tasks.setdefault(row['TID'], {})[row['RID']] = int(num('TaskResource', row, 'QTY'))
+    def requirements(tid, station):
+        result = tasks.get(tid, {})
+        for rid, qty in result.items():
+            if capacity.get((station, rid), 0) < qty:
+                errors.append(f'任务 {tid} @ {station}: 资源 {rid} 数量不足，无法执行。')
+        return result
+    def duration(t, row, field, distribution):
+        dist = val(t, row, distribution)
+        if dist not in ('', '<EXP>'):
+            errors.append(f'{t}.{distribution}: 本版支持留空（固定时长）或 <EXP>（指数分布）。')
+        return {'mean': num(t, row, field), 'random': dist == '<EXP>'}
+    repairs = {}
+    for row in rows('ItemRepair'):
+        repairs[(row['STID'], row['IID'])] = {
+            'time': duration('ItemRepair', row, 'DIRPT', 'DIRPD'),
+            'resources': requirements(val('ItemRepair', row, 'DIRPTID'), row['STID'])}
+    replacements = {}
+    for row in rows('ItemReplacement'):
+        replacements[(row['MID'], row['IID'], row['STID'])] = {
+            'time': duration('ItemReplacement', row, 'SURPT', 'SURPD'),
+            'resources': requirements(val('ItemReplacement', row, 'SURPTID'), row['STID'])}
+    structures = {}
+    for row in rows('MaterielStructure'):
+        if row['MMID'] not in systems or row['MID'] not in items:
+            errors.append('MaterielStructure: 本版支持系统直接安装 LRU 的一层结构。')
+            continue
+        item = items[row['MID']]
+        rate = num('Item', item, 'FRT') * num('Item', item, 'AFFRT') * num('MaterielStructure', row, 'ENVF') / 1_000_000
+        structures.setdefault(row['MMID'], []).append({'iid': row['MID'], 'quantity': int(num('MaterielStructure', row, 'QTYPM')), 'rate': rate})
+    fleets = []
+    for row in rows('SystemDeployment'):
+        sid, location = row['SID'], row['USTID']
+        home = units.get(location, location)
+        if home not in stations:
+            errors.append(f'SystemDeployment.{location}: 无法确定具体站点。')
+            continue
+        if not structures.get(sid):
+            errors.append(f'SystemDeployment.{sid}: 缺少系统组成。')
+        util = num('SystemDeployment', row, 'UTIL')
+        if util > 1:
+            errors.append('SystemDeployment.UTIL: OPHOURS 本版要求使用率在 0 至 1 之间。')
+        root = links.get(home, {}).get('parent', home)
+        for part in structures.get(sid, []):
+            iid = part['iid']
+            if (root, iid) not in repairs:
+                errors.append(f'ItemRepair: 缺少 {iid} 在 {root} 的直接修复规则。')
+            if (sid, iid, home) not in replacements:
+                errors.append(f'ItemReplacement: 缺少 {sid}/{iid} 在 {home} 的更换规则。')
+        fleets.append({'sid': sid, 'home': home, 'unit': location, 'root': root,
+                       'quantity': int(num('SystemDeployment', row, 'QTYPS')), 'util': util,
+                       'parts': structures.get(sid, [])})
+    count = sum(f['quantity'] for f in fleets)
+    if count == 0 or count > 2000:
+        errors.append('SystemDeployment: 系统总数必须在 1 至 2000 之间。')
+    installed_count = sum(f['quantity'] * sum(p['quantity'] for p in f['parts']) for f in fleets)
+    if installed_count + sum(stock.values()) > 200000:
+        errors.append('模型规模超限：装机部件与初始库存合计不超过 200000 件。')
+    estimated_failures = sum(f['quantity'] * f['util'] * sum(p['quantity']*p['rate'] for p in f['parts']) for f in fleets) * horizon
+    if not math.isfinite(estimated_failures) or estimated_failures > 5000000:
+        errors.append('故障事件规模过大：请降低故障率、设备数量或仿真时长。')
+    if errors:
+        raise ModelError(errors)
+    return {'horizon': horizon, 'interval': interval, 'replications': reps, 'seed': seed,
+            'remove_fraction': num('Control', c, 'RMVFR'), 'log': val('Control', c, 'ENLOG') == 'Y',
+            'point': point, 'fleets': fleets, 'count': count, 'links': links, 'stock': stock,
+            'capacity': capacity, 'repairs': repairs, 'replacements': replacements}
