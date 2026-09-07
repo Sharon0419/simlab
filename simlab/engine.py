@@ -8,6 +8,8 @@ from . import __version__
 from .compiler import compile_model
 from .project import model_hash, now
 from .missions import MissionManager, GAP_LABELS
+from .components import Components
+from .maintenance import Workshop, aggregate as aggregate_maintenance
 
 STATES = {'available': '可用', 'waiting_spare': '等待备件',
           'waiting_resource': '等待拆装资源', 'replacement': '拆装作业'}
@@ -78,21 +80,17 @@ def run_one(config, replication=0, progress=None):
     replace_rng = np.random.default_rng(np.random.SeedSequence([replication, 2, config['seed']]))
     pool = ResourcePool(env, config['capacity'], config.get('schedules'))
     mission_manager = None
-    stores, locations, assets, events, samples = {}, {}, [], [], []
+    components = Components(config.get('children', {}))
+    stores, locations, assets, events, samples = {}, components.locations, [], [], []
     failures = Counter()
-    serial = 0
     event_count = 0
-    def token(iid, location):
-        nonlocal serial
-        serial += 1
-        name = f'{iid}#{serial}'
-        locations[name] = location
-        return name
+    def token(iid, location, site=''):
+        return components.create(iid, location, site)
     def store(station, iid):
         return stores.setdefault((station, iid), simpy.Store(env))
     for (station, iid), qty in config['stock'].items():
         for _ in range(qty):
-            store(station, iid).put(token(iid, 'stock'))
+            store(station, iid).put(token(iid, 'stock', station))
     def log(asset, action, item=''):
         nonlocal event_count
         event_count += 1
@@ -107,7 +105,11 @@ def run_one(config, replication=0, progress=None):
         asset['state'] = next_state
         if mission_manager:
             mission_manager.rebalance()
+    workshop = Workshop(env, config, components, pool, store, repair_rng, log) if config.get('children') else None
     def repair(fleet, iid, part):
+        if workshop:
+            yield from workshop.repair(fleet, iid, part)
+            return
         root, home = fleet['root'], fleet['home']
         locations[part] = 'transport'
         if root != home:
@@ -123,9 +125,9 @@ def run_one(config, replication=0, progress=None):
         log(root, '部件修复返库', iid)
     def replenish(fleet, iid):
         part = yield store(fleet['root'], iid).get()
-        locations[part] = 'transport'
+        components.move(part, 'transport', fleet['home'])
         yield env.timeout(config['links'][fleet['home']]['inward'])
-        locations[part] = 'stock'
+        components.move(part, 'stock', fleet['home'])
         yield store(fleet['home'], iid).put(part)
         log(fleet['home'], '补充备件到达', iid)
     def operate(asset, fleet):
@@ -134,8 +136,12 @@ def run_one(config, replication=0, progress=None):
         if total == 0:
             return
         while True:
-            remaining = float(failure_rng.exponential(1 / total))
-            if mission_manager:
+            if workshop:
+                slot, leaf = yield from components.failure(env, asset, fleet, failure_rng, bool(mission_manager))
+                components.fail(slot['token'], leaf)
+            else:
+                remaining = float(failure_rng.exponential(1 / total))
+            if not workshop and mission_manager:
                 # Preserve the remaining running-time budget across standby
                 # periods and reassignment; do not resample at every dispatch.
                 while remaining > 0:
@@ -148,12 +154,16 @@ def run_one(config, replication=0, progress=None):
                     # A completed timeout exhausts the budget exactly. Floating
                     # subtraction can leave a sub-ULP remainder and loop forever.
                     remaining = 0 if deadline in outcome else max(0, remaining - (env.now - start))
-            else:
+            elif not workshop:
                 yield env.timeout(remaining)
-            slot = asset['slots'][int(failure_rng.choice(len(rates), p=rates / total))]
+            if not workshop:
+                slot = asset['slots'][int(failure_rng.choice(len(rates), p=rates / total))]
             iid, broken = slot['iid'], slot['token']
-            failures[iid] += 1
-            log(asset['id'], '发生故障', iid)
+            failed_iid = components.records[leaf]['iid'] if workshop else iid
+            failures[failed_iid] += 1
+            log(asset['id'], '发生故障', failed_iid)
+            if workshop:
+                log(broken, '故障叶子', leaf)
             rule = config['replacements'][(fleet['sid'], iid, fleet['home'])]
             replacement_time = duration(rule['time'], replace_rng)
             state(asset, 'waiting_resource')
@@ -167,14 +177,14 @@ def run_one(config, replication=0, progress=None):
                 env.process(replenish(fleet, iid))
             state(asset, 'waiting_spare')
             spare = yield store(fleet['home'], iid).get()
-            locations[spare] = 'held'
+            components.move(spare, 'held', fleet['home'])
             state(asset, 'waiting_resource')
             yield pool.request(fleet['home'], rule['resources'])
             state(asset, 'replacement')
             yield env.timeout(replacement_time * (1-config['remove_fraction']))
             pool.release(fleet['home'], rule['resources'])
             slot['token'] = spare
-            locations[spare] = 'installed'
+            components.move(spare, 'installed', fleet['home'])
             state(asset, 'available')
             log(asset['id'], '恢复可用', iid)
     for fleet in config['fleets']:
@@ -182,7 +192,7 @@ def run_one(config, replication=0, progress=None):
             slots = []
             for part in fleet['parts']:
                 for _ in range(part['quantity']):
-                    slots.append({'iid': part['iid'], 'rate': part['rate'], 'token': token(part['iid'], 'installed')})
+                    slots.append({'iid': part['iid'], 'rate': part['rate'], 'envf': part['envf'], 'token': token(part['iid'], 'installed', fleet['home'])})
             asset = {'id': f"{fleet['sid']}@{fleet['unit']}-{index+1:03d}", 'slots': slots,
                      'state': 'available', 'last': 0, 'times': Counter(),
                      'sid': fleet['sid'], 'unit': fleet['unit'], 'home': fleet['home'],
@@ -192,6 +202,7 @@ def run_one(config, replication=0, progress=None):
     if config.get('missions'):
         mission_manager = MissionManager(env, config['missions'], assets, log)
     initial_parts = len(locations)
+    initial_by_item = dict(Counter(r['iid'] for r in components.records.values()))
     def observe():
         while True:
             if mission_manager:
@@ -226,7 +237,13 @@ def run_one(config, replication=0, progress=None):
     assert len(locations) == initial_parts
     assert sum(loc == 'installed' for loc in locations.values()) == len(installed)
     assert sum(loc == 'stock' for loc in locations.values()) == len(stocked)
+    components.validate(installed, stocked)
+    instances = components.snapshot() if workshop else None
+    if instances:
+        assert instances['by_item'] == initial_by_item
     return {'availability': totals['available'] / denominator, 'failures': sum(failures.values()),
+            'maintenance': workshop.snapshot() if workshop else None,
+            'components': instances,
             'mission': mission_manager.finish() if mission_manager else None,
             'downtime': {s: totals[s] / len(assets) for s in STATES if s != 'available'},
             'samples': samples, 'events': events, 'events_truncated': event_count > len(events) if config['log'] and replication == 0 else False,
@@ -251,7 +268,11 @@ def simulate(tables, progress=None):
     results = []
     for rep in range(config['replications']):
         callback = (lambda fraction, r=rep: progress((r+fraction)/config['replications'])) if progress else None
-        results.append(run_one(config, rep, callback))
+        one = run_one(config, rep, callback)
+        if rep and one['maintenance'] is not None:
+            one['maintenance']['jobs'] = []
+            one['components']['instances'] = []
+        results.append(one)
     availability = np.array([r['availability'] for r in results])
     mean = float(availability.mean())
     half = t95(len(results)) * float(availability.std(ddof=1)) / math.sqrt(len(results)) if len(results) > 1 else None
@@ -278,6 +299,8 @@ def simulate(tables, progress=None):
     if progress:
         progress(1.0)
     return {'engine': __version__, 'created': now(), 'model_hash': model_hash(tables),
+            'maintenance': aggregate_maintenance(results) if config.get('children') else None,
+            'components': results[0]['components'],
             'mission': mission,
             'versions': {'python': platform.python_version(), 'simpy': simpy.__version__, 'numpy': np.__version__},
             'seed': config['seed'], 'replications': len(results), 'horizon': config['horizon'],
@@ -288,6 +311,6 @@ def simulate(tables, progress=None):
             'downtime': {key: float(np.mean([r['downtime'][key] for r in results])) for key in results[0]['downtime']},
             'resources': {key: float(np.mean([r['resources'][key] for r in results])) for key in results[0]['resources']},
             'events': results[0]['events'], 'events_truncated': results[0]['events_truncated'],
-            'replication_results': [{k: v for k, v in r.items() if k not in ('samples', 'events')} for r in results],
-            'assumptions': '一层串联 LRU；指数故障；两级维修闭环；资源组合原子申请；班内启动、跨班继续。' +
+            'replication_results': [{k: v for k, v in r.items() if k not in ('samples', 'events', 'components', 'maintenance')} for r in results],
+            'assumptions': ('System/LRU/SRU 串联；基地换LRU、站内维修SRU；叶子指数故障；' if config.get('children') else '一层串联 LRU；指数故障；') + '两级维修闭环；资源组合原子申请；班内启动、跨班继续。' +
                 ('固定需求窗口；先到先服务、不抢占；故障退出、即时补位；待命不累计运行故障。' if mission else '连续使用率；无任务调度。')}

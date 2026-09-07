@@ -3,8 +3,10 @@ import math
 from .schema import TABLES, value, effective
 from .validation import validate
 from .operations import SUPPORTED_OPERATIONS, compile_operations
+from .hierarchy import compile_structure
 
 SUPPORTED = {
+    'SimLabDepotProcess': {'LRU', 'STATION', 'DIAG_H', 'DIAG_TASK', 'TEST_H', 'TEST_TASK'},
     'System': {'SID', 'FRT'},
     'Item': {'IID', 'FRT', 'OPID', 'TYPE', 'AFFRT', 'CRIT', 'TRACK'},
     'MaterielStructure': {'MID', 'MMID', 'QTYPM', 'ENVF'},
@@ -96,8 +98,8 @@ def compile_model(tables):
         if num('System', row, 'FRT') != 0:
             errors.append(f'System.{sid}.FRT: 本版使用部件故障，请将系统独立故障率设为 0。')
     for iid, row in items.items():
-        if val('Item', row, 'TYPE') != 'LRU' or val('Item', row, 'OPID') != 'OPHOURS' or num('Item', row, 'CRIT') != 1:
-            errors.append(f'Item.{iid}: 本版支持 TYPE=LRU、OPID=OPHOURS、CRIT=1。')
+        if val('Item', row, 'TYPE') not in ('LRU', 'SRU') or val('Item', row, 'OPID') != 'OPHOURS' or num('Item', row, 'CRIT') != 1:
+            errors.append(f'Item.{iid}: 本版支持 TYPE=LRU/SRU、OPID=OPHOURS、CRIT=1。')
     for rid, row in resources.items():
         if val('Resource', row, 'TYPE') != 'SPECIAL':
             errors.append(f'Resource.{rid}: 本版支持固定数量 SPECIAL 资源。')
@@ -147,14 +149,19 @@ def compile_model(tables):
         replacements[(row['MID'], row['IID'], row['STID'])] = {
             'time': duration('ItemReplacement', row, 'SURPT', 'SURPD'),
             'resources': requirements(val('ItemReplacement', row, 'SURPTID'), row['STID'])}
-    structures = {}
-    for row in rows('MaterielStructure'):
-        if row['MMID'] not in systems or row['MID'] not in items:
-            errors.append('MaterielStructure: 本版支持系统直接安装 LRU 的一层结构。')
-            continue
-        item = items[row['MID']]
-        rate = num('Item', item, 'FRT') * num('Item', item, 'AFFRT') * num('MaterielStructure', row, 'ENVF') / 1_000_000
-        structures.setdefault(row['MMID'], []).append({'iid': row['MID'], 'quantity': int(num('MaterielStructure', row, 'QTYPM')), 'rate': rate})
+    structures, children, structure_errors = compile_structure(tables)
+    errors.extend(structure_errors)
+    depot_processes = {}
+    for row in rows('SimLabDepotProcess'):
+        parent, station = row['LRU'], row['STATION']
+        if parent not in children:
+            errors.append(f'SimLabDepotProcess.{parent}: 仅用于带 SRU 子件的 LRU。')
+        depot_processes[(station, parent)] = {
+            'diagnosis': {'time': {'mean': float(row['DIAG_H']), 'random': False}, 'resources': requirements(row.get('DIAG_TASK', ''), station)},
+            'test': {'time': {'mean': float(row['TEST_H']), 'random': False}, 'resources': requirements(row.get('TEST_TASK', ''), station)}}
+    for station, iid in repairs:
+        if iid in children:
+            errors.append(f'ItemRepair.{iid}@{station}: 父 LRU 不能同时配置直接修复；请使用子件维修和 SimLabDepotProcess。')
     fleets = []
     for row in rows('SystemDeployment'):
         sid, location = row['SID'], row['USTID']
@@ -170,7 +177,13 @@ def compile_model(tables):
         root = links.get(home, {}).get('parent', home)
         for part in structures.get(sid, []):
             iid = part['iid']
-            if (root, iid) not in repairs:
+            if iid in children:
+                if (root, iid) not in depot_processes:
+                    errors.append(f'SimLabDepotProcess: 缺少 {iid}@{root} 的检测与测试工序。')
+                for child in children[iid]:
+                    if (root, child['iid']) not in repairs or (iid, child['iid'], root) not in replacements:
+                        errors.append(f'SRU {child["iid"]}@{root}: 缺少直接修复或父 LRU 内部更换规则。')
+            elif (root, iid) not in repairs:
                 errors.append(f'ItemRepair: 缺少 {iid} 在 {root} 的直接修复规则。')
             if (sid, iid, home) not in replacements:
                 errors.append(f'ItemReplacement: 缺少 {sid}/{iid} 在 {home} 的更换规则。')
@@ -180,14 +193,17 @@ def compile_model(tables):
     count = sum(f['quantity'] for f in fleets)
     if count == 0 or count > 2000:
         errors.append('SystemDeployment: 系统总数必须在 1 至 2000 之间。')
-    installed_count = sum(f['quantity'] * sum(p['quantity'] for p in f['parts']) for f in fleets)
-    if installed_count + sum(stock.values()) > 200000:
+    def physical_size(iid):
+        return 1 + sum(p['quantity'] for p in children.get(iid, []))
+    installed_count = sum(f['quantity'] * sum(p['quantity'] * physical_size(p['iid']) for p in f['parts']) for f in fleets)
+    if installed_count + sum(qty * physical_size(iid) for (_, iid), qty in stock.items()) > 200000:
         errors.append('模型规模超限：装机部件与初始库存合计不超过 200000 件。')
     estimated_failures = sum(f['quantity'] * f['util'] * sum(p['quantity']*p['rate'] for p in f['parts']) for f in fleets) * horizon
     if not math.isfinite(estimated_failures) or estimated_failures > 5000000:
         errors.append('故障事件规模过大：请降低故障率、设备数量或仿真时长。')
     missions, schedules, operation_errors = compile_operations(
-        tables, fleets, capacity, repairs, replacements, horizon, reps)
+        tables, fleets, capacity, repairs, replacements, horizon, reps,
+        [(station, rule) for (station, _), stages in depot_processes.items() for rule in stages.values()])
     errors.extend(operation_errors)
     if errors:
         raise ModelError(errors)
@@ -195,4 +211,4 @@ def compile_model(tables):
             'remove_fraction': num('Control', c, 'RMVFR'), 'log': val('Control', c, 'ENLOG') == 'Y',
             'point': point, 'fleets': fleets, 'count': count, 'links': links, 'stock': stock,
             'capacity': capacity, 'repairs': repairs, 'replacements': replacements,
-            'missions': missions, 'schedules': schedules}
+            'missions': missions, 'schedules': schedules, 'children': children, 'depot_processes': depot_processes}

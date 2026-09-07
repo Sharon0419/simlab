@@ -69,7 +69,7 @@ class ModelEditor(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(label('模型数据', 'PageTitle'))
-        outer.addWidget(label('SIMLOX 2017 原始字段 · 单位与约束来自本机数据字典', 'Muted'))
+        outer.addWidget(label('SIMLOX 2017 原始字典 + 明确标注的 SimLab 扩展表', 'Muted'))
         splitter = QSplitter()
         outer.addWidget(splitter, 1)
         left = QWidget()
@@ -79,7 +79,7 @@ class ModelEditor(QWidget):
         self.search.setPlaceholderText('搜索表名、字段代码…')
         self.search.textChanged.connect(self.filter_tree)
         ll.addWidget(self.search)
-        self.all_tables = QCheckBox('显示全部 133 张表')
+        self.all_tables = QCheckBox(f'显示全部 {len(TABLES)} 张表（含扩展）')
         self.all_tables.toggled.connect(self.filter_tree)
         ll.addWidget(self.all_tables)
         self.tree = QTreeWidget()
@@ -189,6 +189,8 @@ class ModelEditor(QWidget):
         def line(title, content):
             return f'<p style="color:#9fb4d1;margin-bottom:3px">{title}</p><p style="margin-top:0;color:#dce8fa">{esc(str(content or "—"))}</p>'
         text = f'<h3 style="color:#8fc5ff">{esc(field["id"])}</h3><b>{esc(field_label(field))}</b>'
+        if self.current_table == 'SimLabDepotProcess':
+            text += '<p>SimLab 独立扩展表 v1；不是 SIMLOX 原厂字段。</p>'
         text += line('原始定义', field['description'])
         text += line('数据类型 / 字段类型', field['type']+' / '+field['kind'])
         text += line('基本单位', field['unit'])

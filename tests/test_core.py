@@ -15,8 +15,9 @@ def small():
     return p
 
 def test_dictionary_counts_and_units():
-    assert len(TABLES) == 133
-    assert sum(map(len, TABLES.values())) == 891
+    assert len(SCHEMA['tables']) == 133
+    assert sum(map(len, SCHEMA['tables'].values())) == 891
+    assert 'SimLabDepotProcess' in TABLES
     field = next(f for f in TABLES['Item'] if f['id'] == 'FRT')
     assert field['unit'] == '1/MOPIDs'
     assert [f['id'] for f in TABLES['SystemDeployment']] == ['SID', 'USTID', 'QTYPS', 'UTIL', 'PLID', 'NOTE']

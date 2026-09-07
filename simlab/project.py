@@ -11,6 +11,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from .schema import SCHEMA, TABLES
+from .extensions import VERSION as EXTENSIONS_VERSION
 
 FORMAT = 1
 MAX_PACKAGE_BYTES = 128 * 1024 * 1024
@@ -21,13 +22,15 @@ def now():
 def new_project(name='未命名项目'):
     return {'id': str(uuid.uuid4()), 'revision': str(uuid.uuid4()), 'parent_revision': None,
             'name': name, 'created': now(), 'updated': now(), 'format': FORMAT,
-            'schema_sha256': SCHEMA['source_sha256'], 'tables': {}, 'runs': []}
+            'schema_sha256': SCHEMA['source_sha256'], 'extensions_version': EXTENSIONS_VERSION, 'tables': {}, 'runs': []}
 
 def model_hash(tables):
     raw = json.dumps(tables, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 def check_structure(project):
+    if project.get('extensions_version', EXTENSIONS_VERSION) != EXTENSIONS_VERSION:
+        raise ValueError('SimLab 扩展格式版本不支持。')
     if project.get('format') != FORMAT:
         raise ValueError('项目格式版本不支持，请使用匹配的软件版本。')
     if project.get('schema_sha256') != SCHEMA['source_sha256']:
@@ -66,6 +69,7 @@ def save_project(project, path, backup=True):
     path = Path(path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     candidate = copy.deepcopy(project)
+    candidate.setdefault('extensions_version', EXTENSIONS_VERSION)
     candidate['updated'] = now()
     candidate['revision'] = str(uuid.uuid4())
     fd, tmp = tempfile.mkstemp(prefix='.save-', suffix='.sqlite', dir=path.parent)
@@ -102,6 +106,7 @@ def load_project(path):
 
 def export_package(project, destination, include_results=True):
     snapshot = copy.deepcopy(project)
+    snapshot.setdefault('extensions_version', EXTENSIONS_VERSION)
     if not include_results:
         snapshot['runs'] = []
     check_structure(snapshot)

@@ -32,7 +32,7 @@ def intersect(left, right):
     return result
 
 
-def compile_operations(tables, fleets, capacity, repairs, replacements, horizon, reps):
+def compile_operations(tables, fleets, capacity, repairs, replacements, horizon, reps, extra_rules=()):
     errors, missions, schedules = [], [], {}
     def val(table, row, col):
         return value(table, row, col)
@@ -111,6 +111,8 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
     for (station, _), rule in repairs.items():
         _check_common(station, rule, schedules, horizon, errors)
     for (_, _, station), rule in replacements.items():
+        _check_common(station, rule, schedules, horizon, errors)
+    for station, rule in extra_rules:
         _check_common(station, rule, schedules, horizon, errors)
     return missions, schedules, errors
 

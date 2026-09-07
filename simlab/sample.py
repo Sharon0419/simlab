@@ -66,3 +66,21 @@ def mission_project():
                           'ETIM': str(day * 24 + 17)} for day in range(30)]
     t['ResourceStationData'] = [{'RID': 'TECH', 'STID': station, 'SHPID': 'DAY'} for station in ('BASE', 'DEPOT')]
     return project
+
+
+def layered_project():
+    project = mission_project()
+    project['name'] = '示例 · 基地换 LRU 与站内 SRU 维修'
+    t = project['tables']
+    next(r for r in t['Item'] if r['IID'] == 'POWER')['FRT'] = '0'
+    t['Item'].append({'IID': 'BOARD', 'DESCR': '动力模块控制板', 'TYPE': 'SRU', 'FRT': '6000'})
+    t['MaterielStructure'].append({'MID': 'BOARD', 'MMID': 'POWER', 'QTYPM': '1'})
+    t['StockAllocation'].append({'POINT': 'BASELINE', 'IID': 'BOARD', 'STID': 'DEPOT', 'STSIZ': '1'})
+    t['ItemRepair'] = [r for r in t['ItemRepair'] if r['IID'] != 'POWER']
+    t['ItemRepair'].append({'IID': 'BOARD', 'STID': 'DEPOT', 'DIRPT': '16', 'SURPT': '0', 'DIRPTID': 'REPAIR'})
+    t['ItemReplacement'].append({'MID': 'POWER', 'IID': 'BOARD', 'STID': 'DEPOT', 'SURPT': '2', 'SURPTID': 'REPLACE'})
+    t['Tasks'].append({'TID': 'INSPECT', 'DESCR': '模块检测与修后测试'})
+    t['TaskResource'].extend([{'TID': 'INSPECT', 'RID': 'TECH', 'QTY': '1'}, {'TID': 'INSPECT', 'RID': 'BAY', 'QTY': '1'}])
+    t['SimLabDepotProcess'] = [{'LRU': 'POWER', 'STATION': 'DEPOT', 'DIAG_H': '1', 'DIAG_TASK': 'INSPECT',
+                               'TEST_H': '1', 'TEST_TASK': 'INSPECT'}]
+    return project

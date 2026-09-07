@@ -14,12 +14,14 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxL
     QTableWidget, QTableWidgetItem, QHeaderView, QTextBrowser, QTabWidget, QAbstractItemView)
 from ..schema import TABLES, SCHEMA, value
 from ..project import new_project, save_project, load_project, export_package, import_package, now, model_hash
-from ..sample import demo_project, mission_project
+from ..sample import demo_project, mission_project, layered_project
 from .. import __version__
 from ..missions import GAP_LABELS
+from ..maintenance import PHASES
 from ..validation import validate
 from ..compiler import compile_model, ModelError
 from .modeling import ModelEditor
+from .structure import StructureView
 from .widgets import STYLE, label, button, card, Metric, AvailabilityChart, MissionChart
 
 def readonly_table(headers):
@@ -105,6 +107,7 @@ class MainWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setObjectName('Navigation')
         self.nav.addItems(['01   项目概览', '02   模型数据', '03   仿真实验', '04   结果分析', '05   建模说明'])
+        self.nav.addItem('06   组成结构')
         self.nav.currentRowChanged.connect(self.navigate)
         sl.addWidget(self.nav, 1)
         bottom = label(f'●  本机运行 · 数据本地保存\n\nSIMLOX 2017 字段基线\nv{__version__}  /  独立开发', 'SidebarSub')
@@ -137,6 +140,8 @@ class MainWindow(QMainWindow):
         self.build_experiment()
         self.build_results()
         self.build_help()
+        self.structure = StructureView()
+        self.pages.addWidget(self.structure)
         rl.addWidget(self.pages, 1)
         root.addWidget(right, 1)
         self.nav.setCurrentRow(0)
@@ -152,6 +157,8 @@ class MainWindow(QMainWindow):
         head.addWidget(button('重命名项目', self.rename_project))
         self.mission_demo_button = button('新建任务日历示例', self.new_mission_demo, True)
         head.addWidget(self.mission_demo_button)
+        self.layered_demo_button = button('新建多层维修示例', self.new_layered_demo)
+        head.addWidget(self.layered_demo_button)
         layout.addLayout(head)
         layout.addWidget(label('从装备模型到保障能力，用可复现的实验比较你的方案。', 'Muted'))
         metrics = QHBoxLayout()
@@ -248,7 +255,7 @@ class MainWindow(QMainWindow):
         notes, nl = card()
         nl.addWidget(label('当前引擎的计算边界'))
         text = QTextBrowser()
-        text.setHtml('''<p>支持系统直接安装多种 LRU，各部件组成串聯系统。</p>
+        text.setHtml('''<p>支持 System→LRU→SRU 串联结构。基地整换 LRU，修理站检测、换修 SRU、测试后返库。</p>
         <p>故障率单位为每百万运行小时。系统按 UTIL 连续折算运行量，故障后暂停使用。</p>
         <p>支持两级保障网络、部件拆装、修复返库、运输延迟及组合资源排队。</p>
         <p>全量建模表均可保存交换；高级规则尚未接入的，会在运行前指出并拦截。</p>
@@ -279,6 +286,8 @@ class MainWindow(QMainWindow):
         head.addWidget(button('导出结果 CSV', self.export_results))
         self.mission_export_button = button('导出任务 CSV', self.export_missions)
         head.addWidget(self.mission_export_button)
+        self.maintenance_export_button = button('维修 CSV', self.export_maintenance)
+        head.addWidget(self.maintenance_export_button)
         head.addWidget(button('从快照建立分支', self.branch_from_result))
         layout.addLayout(head)
         self.result_meta = label('运行一个实验，查看可用度、停机原因与资源瓶颈。', 'Muted', True)
@@ -313,9 +322,13 @@ class MainWindow(QMainWindow):
         self.compare_table = readonly_table(['实验', '可用度', '任务满足率', 'P05 / P95', '配置方案', '重复次数', '模型指纹'])
         self.mission_table = readonly_table(['任务窗口', '开始 / 小时', '结束 / 小时', '需求设备', '供给设备小时', '缺口设备小时', '全程无缺口比例'])
         self.gap_table = readonly_table(['缺口原因', '平均缺口设备小时'])
+        self.maintenance_table = readonly_table(['层级', '平均送修数', '平均完成数', '平均未完成数', '已完成平均周转 / 小时'])
+        self.phase_table = readonly_table(['层级', '维修工序', '平均总耗时 / 小时'])
+        self.component_table = readonly_table(['实物编号', '部件类型', '父实物', '自身状态', '所在流程', '站点', '健康状态'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
                               ('首轮事件', self.events_table), ('实验对比', self.compare_table),
-                              ('任务窗口', self.mission_table), ('任务缺口', self.gap_table)]:
+                              ('任务窗口', self.mission_table), ('任务缺口', self.gap_table),
+                              ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table)]:
             tabs.addTab(widget, title)
         self.result_tabs = tabs
         layout.addWidget(tabs, 2)
@@ -338,11 +351,16 @@ class MainWindow(QMainWindow):
         <p>6. Tasks / TaskResource / Resource / ResourceAllocation 描述共享资源需求与数量。</p>
         <p>7. 校验模型，运行实验，比较库存和资源配置变化后的结果。</p>
         <h3>字段基线</h3>
+        <p>0.3 新增独立 SimLabDepotProcess 扩展表：LRU/STATION 标识维修路由，DIAG_H/DIAG_TASK 为检测时间和资源任务，TEST_H/TEST_TASK 为修后测试。不是原厂表；原字典仍为 133 表/891 字段。</p>
+        <h3>多层维修</h3>
+        <p>带 SRU 的 LRU 要求 FRT=0、AFFRT=1，故障来自叶子 SRU。MaterielStructure 描述两层组成；ItemReplacement 描述基地 System/LRU 与站内 LRU/SRU 拆装；ItemRepair 仅描述叶子直接修复。</p>
+        <p>备用 LRU 隐含完整健康子件，SRU 库存数量表示额外散件。等待 SRU 时释放工序资源，故障 SRU 单独修复；父 LRU 安装完成并通过测试后返库。车辆有备用 LRU 时可先恢复，不等待故障模块修复。</p>
+        <p>维修统计包含未完成工单已发生的工序耗时；平均周转仅计已完成工单。部件实例与维修 CSV 是首轮样本，最多 1000 条，不能当成所有重复的完整历史。</p>
         <p>本机 SIMLOX 2017 的 DatabaseDictionary_SIMLOX.txt：133 张表，891 个字段。保留原字段代码、顺序、数据类型、默认值、单位、约束与关联。中文为辅助标签。</p>
         <p>字段层面的对齐不代表原厂引擎的数值等价。仅当前已实现的基础模型可以运行，其他表仍可编辑和交换。</p>
         <h3>运行口径</h3>
         <p>FRT=1000 且 OPID=OPHOURS，表示平均每 1000 个运行小时发生一次故障。UTIL=0.5 表示每个可用日历小时累计 0.5 个运行小时。</p>
-        <p>所有 LRU 故障均使设备停机，设备停机期间不累计运行故障。修复后按指数无记忆假设继续运行。暂不支持冗余、老化、预防性维修和供应中断。</p>
+        <p>串联关键部件故障使设备停机，停机期间不累计运行故障。层级模式保留健康叶子的剩余故障预算，修复叶子下次运行再抽样。暂不支持冗余、老化、预防性维修和供应中断。</p>
         <h3>0.2 任务与班次</h3>
         <p>Operations → OperationProfile → MissionType / MissionSystem 定义固定需求窗口，STIM 为从仿真开始算起的小时，DURN 为持续小时。每行启动一个窗口；不支持递归、随机或延后启动。NOS=MNOS；只绑定一种系统。</p>
         <p>任务模式要求 UTIL=1。仅被分配的设备累计运行故障，待命不累计。按开始时间和任务标识先到先服务，不抢占已有分配；故障设备退出，空闲设备即时补位，需求窗口按原定时间结束。</p>
@@ -367,6 +385,8 @@ class MainWindow(QMainWindow):
             return
         self.pages.setCurrentIndex(index)
         if self.project:
+            if index == 5:
+                self.structure.set_project(self.project)
             if index == 2:
                 self.sync_controls()
             if index == 0:
@@ -403,6 +423,7 @@ class MainWindow(QMainWindow):
         if self.restore:
             self.settings.setValue('last_project', str(path))
         self.editor.set_project(project)
+        self.structure.set_project(project)
         self.sync_controls()
         self.refresh_overview()
         self.refresh_results()
@@ -427,6 +448,19 @@ class MainWindow(QMainWindow):
             self.editor.select_table('MissionType')
         except Exception as error:
             self.warn('创建任务示例失败', str(error))
+
+    def new_layered_demo(self):
+        if self.process is not None:
+            self.warn('计算仍在运行', '请先结束当前实验。')
+            return
+        if self.dirty and not self.save():
+            return
+        project = layered_project()
+        try:
+            self.adopt_project(project, self.data_dir/'projects'/f'layered-{project["id"][:12]}.sqlite')
+            self.nav.setCurrentRow(5)
+        except Exception as error:
+            self.warn('创建多层维修示例失败', str(error))
 
     def refresh_overview(self):
         if not self.project:
@@ -706,6 +740,9 @@ class MainWindow(QMainWindow):
     def show_result(self, *args):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
         self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
+        self.maintenance_export_button.setEnabled(bool(run and run['result'].get('maintenance')))
+        for table in (self.maintenance_table, self.phase_table, self.component_table):
+            table.setRowCount(0)
         if not run:
             for metric in self.result_cards:
                 metric.number.setText('—')
@@ -717,6 +754,12 @@ class MainWindow(QMainWindow):
                 table.setRowCount(0)
             return
         result = run['result']
+        maintenance = result.get('maintenance')
+        if maintenance:
+            fill_table(self.maintenance_table, [[kind, f'{v["started"]:.1f}', f'{v["completed"]:.1f}', f'{v["in_progress"]:.1f}', f'{v["mean_tat"]:.2f}' if v['mean_tat'] is not None else '尚无完成'] for kind, v in maintenance['by_kind'].items()])
+            fill_table(self.phase_table, [[kind, PHASES[key], f'{hours:.2f}'] for kind, v in maintenance['by_kind'].items() for key, hours in v['phase_hours'].items()])
+            locs = {'installed': '装在设备', 'attached': '装在父件', 'stock': '在库', 'held': '已领待装', **PHASES}
+            fill_table(self.component_table, [[r['id'], r['iid'], r['parent'] or '—', locs.get(r['location'], r['location']), locs.get(r['physical_location'], r['physical_location']), r['site'], '故障/待修复' if r['broken'] else '健康'] for r in result['components']['instances']])
         confidence = result['ci95']
         numbers = [f'{result["availability"]:.2%}', f'{confidence[0]:.1%} – {confidence[1]:.1%}' if confidence else '单次试验',
                    f'{result["failures"]:.1f}', str(result['fleet_size'])]
@@ -724,6 +767,8 @@ class MainWindow(QMainWindow):
             metric.number.setText(number)
         changed = '当前模型已修改，以下为历史快照结果' if model_hash(self.project['tables']) != result['model_hash'] else '与当前模型一致'
         extra = ' · 首轮事件已截断至 5000 条' if result.get('events_truncated') else ''
+        if maintenance:
+            extra += ' · 部件/维修明细为首轮，最多1000条；周转仅计已完成工单'
         self.result_meta.setText(f'{result["horizon"]/24:g} 天 / {result["replications"]} 次试验 / 种子 {result["seed"]} / {changed}{extra}')
         self.chart.set_samples(result['samples'])
         mission = result.get('mission')
@@ -798,6 +843,26 @@ class MainWindow(QMainWindow):
             try:
                 self.export_missions_path(path)
                 self.statusBar().showMessage('任务结果已导出：'+path, 10000)
+            except Exception as error:
+                self.warn('导出失败', str(error))
+
+    def export_maintenance_path(self, path):
+        run = self.selected_run()
+        if not run or not run['result'].get('maintenance'):
+            raise ValueError('本实验没有多层维修数据。')
+        with open(path, 'w', encoding='utf-8-sig', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['run_id', 'model_hash', 'replication', 'seed', 'job_id', 'part', 'kind', 'parent', 'station', 'start', 'end', 'phase', 'phase_hours'])
+            for job in run['result']['maintenance']['jobs']:
+                for phase, hours in job['phase_hours'].items():
+                    writer.writerow([run['id'], run['model_hash'], 0, run['result']['seed'], job['id'], job['part'], job['kind'], job['parent'], job['station'], job['start'], job['end'], phase, hours])
+
+    def export_maintenance(self):
+        path, _ = QFileDialog.getSaveFileName(self, '导出首轮维修工序（最多1000工单）', '维修工序.csv', 'CSV (*.csv)')
+        if path:
+            try:
+                self.export_maintenance_path(path)
+                self.statusBar().showMessage('首轮维修工序已导出：'+path, 10000)
             except Exception as error:
                 self.warn('导出失败', str(error))
     def closeEvent(self, event):

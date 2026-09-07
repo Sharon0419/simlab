@@ -120,6 +120,49 @@ def run(directory):
                'mission CSV export', 'mission package roundtrip'],
               'mission_fulfillment': mission['fulfillment'], 'mission_gap_hours': mission['gap_hours'],
               'availability': last['result']['availability'], 'replications': last['result']['replications']}
+    window.nav.setCurrentRow(0)
+    QTest.mouseClick(window.layered_demo_button, Qt.LeftButton)
+    assert window.pages.currentIndex() == 5
+    assert window.structure.tree.topLevelItem(0).child(0).child(0).text(0) == 'BOARD'
+    QTest.qWait(100)
+    window.grab().save(str(directory/'06-structure.png'))
+    window.nav.setCurrentRow(1)
+    window.editor.select_table('SimLabDepotProcess')
+    window.editor.grid.item(0, 2).setText('2')
+    window.save()
+    assert load_project(window.project_path)['tables']['SimLabDepotProcess'][0]['DIAG_H'] == '2'
+    window.grab().save(str(directory/'07-depot-process.png'))
+    window.nav.setCurrentRow(2)
+    window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button, Qt.LeftButton)
+    deadline = time.monotonic()+60
+    while window.process is not None and time.monotonic() < deadline:
+        QTest.qWait(50)
+    if window.process is not None:
+        window.process.kill()
+        window.process.waitForFinished(3000)
+        raise AssertionError('Layered worker timed out')
+    assert not failures, failures
+    layered_run = window.project['runs'][-1]
+    assert layered_run['status'] == 'completed', layered_run
+    m = layered_run['result']['maintenance']
+    assert m['by_kind']['LRU']['completed'] > 0
+    assert m['by_kind']['SRU']['completed'] > 0
+    assert window.maintenance_table.rowCount() == 2
+    assert window.component_table.rowCount() > 0
+    window.result_tabs.setCurrentIndex(7)
+    QTest.qWait(100)
+    window.grab().save(str(directory/'08-maintenance-results.png'))
+    window.export_maintenance_path(directory/'maintenance.csv')
+    assert len((directory/'maintenance.csv').read_text(encoding='utf-8-sig').splitlines()) > 5
+    export_package(window.project, directory/'layered-complete.simproj')
+    imported = import_package(directory/'layered-complete.simproj')
+    assert imported['runs'][-1]['result'] == layered_run['result']
+    window.adopt_project(imported, directory/'layered-imported.sqlite')
+    assert window.maintenance_table.rowCount() == 2
+    output['checks'] += ['layered example', 'structure tree', 'depot extension edit', 'layered worker', 'maintenance CSV', 'layered package roundtrip']
+    output['layered_availability'] = layered_run['result']['availability']
+    output['layered_lru_tat'] = m['by_kind']['LRU']['mean_tat']
     window.close()
     app.processEvents()
     (directory/'smoke-result.json').write_text(json.dumps(output, indent=2), encoding='utf-8')
