@@ -132,3 +132,48 @@ class AvailabilityChart(QWidget):
         for i in range(6):
             x = area.left()+i/5*area.width()
             painter.drawText(QRectF(x-32, area.bottom()+12, 64, 20), Qt.AlignCenter, f'{horizon*i/5/24:.0f} 天')
+
+
+class MissionChart(QWidget):
+    """Sampled demand and supplied vehicles; statistics use event integration."""
+    def __init__(self):
+        super().__init__()
+        self.samples = []
+        self.setMinimumHeight(200)
+
+    def set_samples(self, samples):
+        self.samples = samples
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(self.rect(), QColor('#112139'))
+        painter.setFont(QFont('Microsoft YaHei UI', 9))
+        area = QRectF(55, 30, max(10, self.width()-80), max(10, self.height()-75))
+        painter.setPen(QColor('#a4bbd8'))
+        if not self.samples:
+            painter.drawText(area, Qt.AlignCenter, '运行任务日历示例后显示供需曲线；旧实验无任务数据')
+            return
+        horizon = self.samples[-1]['time'] or 1
+        maximum = max(1, max(s.get('demand', 0) for s in self.samples))
+        for i in range(5):
+            y = area.bottom()-area.height()*i/4
+            painter.setPen(QPen(QColor('#29415f'), 1, Qt.DashLine))
+            painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
+            painter.setPen(QColor('#a4bbd8'))
+            painter.drawText(QRectF(0, y-10, 45, 20), Qt.AlignRight | Qt.AlignVCenter, f'{maximum*i/4:g}')
+        for key, color, caption, offset in [('demand', '#f3c77a', '需求设备', 55), ('supplied', '#60a5fa', '实际供给', 165)]:
+            painter.setPen(QColor(color))
+            painter.drawText(QRectF(offset, 0, 110, 25), Qt.AlignLeft, caption)
+            points = [QPointF(area.left()+s['time']/horizon*area.width(), area.bottom()-s.get(key, 0)/maximum*area.height()) for s in self.samples]
+            path = QPainterPath(points[0])
+            for previous, point in zip(points, points[1:]):
+                path.lineTo(QPointF(point.x(), previous.y()))
+                path.lineTo(point)
+            painter.setPen(QPen(QColor(color), 2, Qt.DashLine if key == 'demand' else Qt.SolidLine))
+            painter.drawPath(path)
+        painter.setPen(QColor('#a4bbd8'))
+        for i in range(6):
+            x = area.left()+i/5*area.width()
+            painter.drawText(QRectF(x-34, area.bottom()+12, 68, 20), Qt.AlignCenter, f'{horizon*i/5/24:.1f} 天')

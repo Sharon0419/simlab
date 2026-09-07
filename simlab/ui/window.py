@@ -14,11 +14,13 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxL
     QTableWidget, QTableWidgetItem, QHeaderView, QTextBrowser, QTabWidget, QAbstractItemView)
 from ..schema import TABLES, SCHEMA, value
 from ..project import new_project, save_project, load_project, export_package, import_package, now, model_hash
-from ..sample import demo_project
+from ..sample import demo_project, mission_project
+from .. import __version__
+from ..missions import GAP_LABELS
 from ..validation import validate
 from ..compiler import compile_model, ModelError
 from .modeling import ModelEditor
-from .widgets import STYLE, label, button, card, Metric, AvailabilityChart
+from .widgets import STYLE, label, button, card, Metric, AvailabilityChart, MissionChart
 
 def readonly_table(headers):
     table = QTableWidget(0, len(headers))
@@ -105,7 +107,7 @@ class MainWindow(QMainWindow):
         self.nav.addItems(['01   项目概览', '02   模型数据', '03   仿真实验', '04   结果分析', '05   建模说明'])
         self.nav.currentRowChanged.connect(self.navigate)
         sl.addWidget(self.nav, 1)
-        bottom = label('●  本机运行 · 数据本地保存\n\nSIMLOX 2017 字段基线\nv0.1.0  /  独立开发', 'SidebarSub')
+        bottom = label(f'●  本机运行 · 数据本地保存\n\nSIMLOX 2017 字段基线\nv{__version__}  /  独立开发', 'SidebarSub')
         bottom.setContentsMargins(19, 0, 0, 0)
         sl.addWidget(bottom)
         root.addWidget(sidebar)
@@ -148,6 +150,8 @@ class MainWindow(QMainWindow):
         head.addWidget(label('项目概览', 'PageTitle'))
         head.addStretch()
         head.addWidget(button('重命名项目', self.rename_project))
+        self.mission_demo_button = button('新建任务日历示例', self.new_mission_demo, True)
+        head.addWidget(self.mission_demo_button)
         layout.addLayout(head)
         layout.addWidget(label('从装备模型到保障能力，用可复现的实验比较你的方案。', 'Muted'))
         metrics = QHBoxLayout()
@@ -249,7 +253,9 @@ class MainWindow(QMainWindow):
         <p>支持两级保障网络、部件拆装、修复返库、运输延迟及组合资源排队。</p>
         <p>全量建模表均可保存交换；高级规则尚未接入的，会在运行前指出并拦截。</p>
         <p><b>结果口径：</b>可用度按状态持续时间精确积分；曲线为各重复试验的采样均值。</p>
-        <p>本版不计算任务成功率，不支持原厂二进制 .sxi 文件直接导入。</p>''')
+        <p>填写 Operations 后启用固定任务需求窗口：UTIL=1，待命不累计运行故障；按开始时间分配，不抢占，故障后空闲设备即时补位。</p>
+        <p>资源班次按 ShiftProfile 显式时间窗执行：班内开始，允许跨班完成。任务满足率是设备小时供给比例，不等同原厂任务成功率。</p>
+        <p>从项目概览“新建任务日历示例”开始；不支持原厂二进制 .sxi 文件直接导入。</p>''')
         nl.addWidget(text, 1)
         body.addWidget(notes, 2)
         outer.addLayout(body, 1)
@@ -271,6 +277,8 @@ class MainWindow(QMainWindow):
         self.run_selector.currentIndexChanged.connect(self.show_result)
         head.addWidget(self.run_selector)
         head.addWidget(button('导出结果 CSV', self.export_results))
+        self.mission_export_button = button('导出任务 CSV', self.export_missions)
+        head.addWidget(self.mission_export_button)
         head.addWidget(button('从快照建立分支', self.branch_from_result))
         layout.addLayout(head)
         self.result_meta = label('运行一个实验，查看可用度、停机原因与资源瓶颈。', 'Muted', True)
@@ -289,15 +297,27 @@ class MainWindow(QMainWindow):
         chart_layout.addWidget(label('可用度随时间变化  /  各重复试验均值'))
         self.chart = AvailabilityChart()
         chart_layout.addWidget(self.chart)
-        layout.addWidget(chart_card, 3)
+        self.chart_tabs = QTabWidget()
+        self.chart_tabs.addTab(chart_card, '可用度曲线')
+        mission_card, mission_layout = card()
+        self.mission_summary = label('本实验没有任务日历。', 'Muted', True)
+        mission_layout.addWidget(self.mission_summary)
+        self.mission_chart = MissionChart()
+        mission_layout.addWidget(self.mission_chart)
+        self.chart_tabs.addTab(mission_card, '任务供需')
+        layout.addWidget(self.chart_tabs, 3)
         tabs = QTabWidget()
         self.downtime_table = readonly_table(['停机原因', '平均小时 / 台', '停机占比'])
         self.resource_table = readonly_table(['站点 / 资源', '平均占用率'])
         self.events_table = readonly_table(['仿真时间 / 小时', '对象', '事件', '部件'])
-        self.compare_table = readonly_table(['实验', '可用度', 'P05 / P95', '配置方案', '重复次数', '模型指纹'])
+        self.compare_table = readonly_table(['实验', '可用度', '任务满足率', 'P05 / P95', '配置方案', '重复次数', '模型指纹'])
+        self.mission_table = readonly_table(['任务窗口', '开始 / 小时', '结束 / 小时', '需求设备', '供给设备小时', '缺口设备小时', '全程无缺口比例'])
+        self.gap_table = readonly_table(['缺口原因', '平均缺口设备小时'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
-                              ('首轮事件', self.events_table), ('实验对比', self.compare_table)]:
+                              ('首轮事件', self.events_table), ('实验对比', self.compare_table),
+                              ('任务窗口', self.mission_table), ('任务缺口', self.gap_table)]:
             tabs.addTab(widget, title)
+        self.result_tabs = tabs
         layout.addWidget(tabs, 2)
         self.pages.addWidget(page)
 
@@ -322,7 +342,12 @@ class MainWindow(QMainWindow):
         <p>字段层面的对齐不代表原厂引擎的数值等价。仅当前已实现的基础模型可以运行，其他表仍可编辑和交换。</p>
         <h3>运行口径</h3>
         <p>FRT=1000 且 OPID=OPHOURS，表示平均每 1000 个运行小时发生一次故障。UTIL=0.5 表示每个可用日历小时累计 0.5 个运行小时。</p>
-        <p>所有 LRU 故障均使设备停机，设备停机期间不累计运行故障。修复后按指数无记忆假设继续运行。暂不支持冗余、老化、班次、预防性维修、任务调度和供应中断。</p>
+        <p>所有 LRU 故障均使设备停机，设备停机期间不累计运行故障。修复后按指数无记忆假设继续运行。暂不支持冗余、老化、预防性维修和供应中断。</p>
+        <h3>0.2 任务与班次</h3>
+        <p>Operations → OperationProfile → MissionType / MissionSystem 定义固定需求窗口，STIM 为从仿真开始算起的小时，DURN 为持续小时。每行启动一个窗口；不支持递归、随机或延后启动。NOS=MNOS；只绑定一种系统。</p>
+        <p>任务模式要求 UTIL=1。仅被分配的设备累计运行故障，待命不累计。按开始时间和任务标识先到先服务，不抢占已有分配；故障设备退出，空闲设备即时补位，需求窗口按原定时间结束。</p>
+        <p>任务满足率=供给设备小时/需求设备小时；全程无缺口比例独立计算。两者不宣称与原厂任务成功判定一致。统计精确积分，曲线是采样显示，可能漏掉短时缺口。</p>
+        <p>ShiftProfile 直接引用 Shift，STIM/ETIM 为绝对小时；ResourceStationData.SHPID 绑定资源。班内才能开始拆装或修复，已开始允许跨班完成；未绑定资源为全天可用。资源占用率仍以整个日历时间为分母。</p>
         <p>拆装总时间按 Control.RMVFR 分成拆卸和安装两段，各段原子申请全部资源。拆下部件送上级修理中心；每次备件请求向上级发出一件补充请求，修复件回到上级库。无上级时在本站修复返库。</p>
         <p>初始库存取 ISTOH（如填写）或 STSIZ。零库存也可运行，设备等待故障件修复返库。等待备件包含缺货与供应运输时间。</p>
         <p>可用度按整个 SIMPE 时间窗积分，初始设备全部可用，不丢弃预热期。置信区间估计均值精度；P05/P95 描述独立试验结果的波动。单次试验不提供置信区间。</p>
@@ -388,6 +413,20 @@ class MainWindow(QMainWindow):
             return
         project = load_project(path)
         self.adopt_project(project, path, save=False)
+
+    def new_mission_demo(self):
+        if self.process is not None:
+            self.warn('计算仍在运行', '请先结束当前实验再新建任务示例。')
+            return
+        if self.dirty and not self.save():
+            return
+        project = mission_project()
+        try:
+            self.adopt_project(project, self.data_dir/'projects'/f'mission-{project["id"][:12]}.sqlite')
+            self.nav.setCurrentRow(1)
+            self.editor.select_table('MissionType')
+        except Exception as error:
+            self.warn('创建任务示例失败', str(error))
 
     def refresh_overview(self):
         if not self.project:
@@ -658,19 +697,23 @@ class MainWindow(QMainWindow):
         comparisons = []
         for run in self.complete_runs:
             result = run['result']
-            comparisons.append([run['name'], f'{result["availability"]:.2%}', f'{result["p05"]:.2%} / {result["p95"]:.2%}', result['point'], result['replications'], result['model_hash'][:12]])
+            mission = result.get('mission')
+            comparisons.append([run['name'], f'{result["availability"]:.2%}', f'{mission["fulfillment"]:.2%}' if mission else '—', f'{result["p05"]:.2%} / {result["p95"]:.2%}', result['point'], result['replications'], result['model_hash'][:12]])
         fill_table(self.compare_table, comparisons)
         self.show_result()
     def selected_run(self):
         return next((r for r in self.complete_runs if r['id'] == self.run_selector.currentData()), None)
     def show_result(self, *args):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
+        self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
         if not run:
             for metric in self.result_cards:
                 metric.number.setText('—')
             self.chart.set_samples([])
             self.result_meta.setText('运行一个实验，查看可用度、停机原因与资源瓶颈。')
-            for table in (self.downtime_table, self.resource_table, self.events_table):
+            self.mission_chart.set_samples([])
+            self.mission_summary.setText('本实验没有任务日历。')
+            for table in (self.downtime_table, self.resource_table, self.events_table, self.mission_table, self.gap_table):
                 table.setRowCount(0)
             return
         result = run['result']
@@ -683,7 +726,19 @@ class MainWindow(QMainWindow):
         extra = ' · 首轮事件已截断至 5000 条' if result.get('events_truncated') else ''
         self.result_meta.setText(f'{result["horizon"]/24:g} 天 / {result["replications"]} 次试验 / 种子 {result["seed"]} / {changed}{extra}')
         self.chart.set_samples(result['samples'])
-        names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源', 'replacement': '拆卸与安装作业'}
+        mission = result.get('mission')
+        self.mission_chart.set_samples(result['samples'] if mission else [])
+        if mission:
+            ci = mission['ci95']
+            interval = f'{ci[0]:.1%}–{ci[1]:.1%}' if ci else '单次试验'
+            self.mission_summary.setText(f'设备小时满足率 {mission["fulfillment"]:.2%} · 均值95%区间 {interval} · 全程无缺口窗口 {mission["full_window_rate"]:.1%}\n平均缺口 {mission["gap_hours"]:.2f} 设备小时；曲线按采样间隔显示，指标按事件积分。')
+            fill_table(self.mission_table, [[t['id'], f'{t["start"]:g}', f'{t["end"]:g}', t['quantity'], f'{t["supplied_hours"]:.2f}', f'{t["gap_hours"]:.2f}', f'{t["full_window_rate"]:.1%}'] for t in mission['tasks']])
+            fill_table(self.gap_table, [[GAP_LABELS[key], f'{v:.2f}'] for key, v in mission['gap_reasons'].items()])
+        else:
+            self.mission_summary.setText('本实验没有任务日历。旧版本实验仍可查看可用度与保障结果。')
+            self.mission_table.setRowCount(0)
+            self.gap_table.setRowCount(0)
+        names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源或班次', 'replacement': '拆卸与安装作业'}
         total = sum(result['downtime'].values())
         fill_table(self.downtime_table, [[names[key], f'{val:.2f}', f'{val/total:.1%}' if total else '0%'] for key, val in result['downtime'].items()])
         fill_table(self.resource_table, [[key, f'{val:.1%}'] for key, val in result['resources'].items()])
@@ -723,6 +778,26 @@ class MainWindow(QMainWindow):
                     for sample in run['result']['samples']:
                         writer.writerow([run['id'], run['model_hash'], run['result']['seed'], sample['time'], sample['available']])
                 self.statusBar().showMessage('结果已导出：'+path, 10000)
+            except Exception as error:
+                self.warn('导出失败', str(error))
+
+    def export_missions_path(self, path):
+        run = self.selected_run()
+        if not run or not run['result'].get('mission'):
+            raise ValueError('本实验没有任务结果。')
+        columns = ['id', 'start', 'end', 'quantity', 'demand_hours', 'supplied_hours', 'gap_hours', 'full_window_rate']
+        with open(path, 'w', encoding='utf-8-sig', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['run_id', 'model_hash', 'seed'] + columns)
+            for task in run['result']['mission']['tasks']:
+                writer.writerow([run['id'], run['model_hash'], run['result']['seed']] + [task[key] for key in columns])
+
+    def export_missions(self):
+        path, _ = QFileDialog.getSaveFileName(self, '导出任务窗口结果', '任务结果.csv', 'CSV (*.csv)')
+        if path:
+            try:
+                self.export_missions_path(path)
+                self.statusBar().showMessage('任务结果已导出：'+path, 10000)
             except Exception as error:
                 self.warn('导出失败', str(error))
     def closeEvent(self, event):

@@ -76,8 +76,49 @@ def run(directory):
     assert branch['runs'][-1]['result'] == last['result']
     window.adopt_project(branch, directory/'imported.sqlite')
     assert window.complete_runs
+    # v0.2: create through the actual UI, edit mission demand, run the worker,
+    # verify durable results and the task-specific export and exchange path.
+    window.nav.setCurrentRow(0)
+    QTest.mouseClick(window.mission_demo_button, Qt.LeftButton)
+    assert window.project['tables']['Operations']
+    assert window.editor.current_table == 'MissionType'
+    # Keep the runtime bounded but retain all 30 daily demand windows.
+    window.editor.grid.item(0, 2).setText('22')
+    window.editor.grid.item(0, 3).setText('22')
+    window.save()
+    window.grab().save(str(directory/'04-mission-model.png'))
+    window.nav.setCurrentRow(2)
+    window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button, Qt.LeftButton)
+    deadline = time.monotonic()+60
+    while window.process is not None and time.monotonic() < deadline:
+        QTest.qWait(50)
+    assert window.process is None, 'Mission worker did not finish'
+    assert not failures, failures
+    mission_run = window.project['runs'][-1]
+    assert mission_run['status'] == 'completed', mission_run
+    mission = mission_run['result']['mission']
+    assert 0 < mission['fulfillment'] < 1
+    assert mission['gap_hours'] >= 2 * 8 * 30
+    assert window.mission_table.rowCount() == 30
+    assert window.mission_export_button.isEnabled()
+    assert load_project(window.project_path)['runs'][-1]['result'] == mission_run['result']
+    window.chart_tabs.setCurrentIndex(1)
+    window.result_tabs.setCurrentIndex(5)
+    QTest.qWait(100)
+    window.grab().save(str(directory/'05-mission-results.png'))
+    window.export_missions_path(directory/'mission-results.csv')
+    assert len((directory/'mission-results.csv').read_text(encoding='utf-8-sig').splitlines()) == 31
+    export_package(window.project, directory/'mission-complete.simproj')
+    imported_mission = import_package(directory/'mission-complete.simproj')
+    assert imported_mission['runs'][-1]['result']['mission'] == mission
+    window.adopt_project(imported_mission, directory/'mission-imported.sqlite')
+    assert window.mission_table.rowCount() == 30
     output = {'status': 'passed', 'checks': ['field editor', 'save/reopen', 'CSV export',
-               'worker cancellation', 'worker run', 'result persistence', 'package export/import', 'branch provenance'],
+               'worker cancellation', 'worker run', 'result persistence', 'package export/import', 'branch provenance',
+               'mission example button', 'mission field edit', 'mission worker run', 'mission persistence',
+               'mission CSV export', 'mission package roundtrip'],
+              'mission_fulfillment': mission['fulfillment'], 'mission_gap_hours': mission['gap_hours'],
               'availability': last['result']['availability'], 'replications': last['result']['replications']}
     window.close()
     app.processEvents()

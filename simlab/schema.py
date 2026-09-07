@@ -25,6 +25,10 @@ TABLE_LABELS = {
     'LateralSupport': '横向支援', 'OperationalModes': '运行模式',
 }
 FIELD_LABELS = {
+    'NOS': '需求设备数', 'MNOS': '最小设备数', 'MNOSA': '中止阈值',
+    'DURN': '任务时长 / 小时', 'STIM': '开始 / 小时', 'ETIM': '结束 / 小时',
+    'SPRID': '任务类型 / 子剖面', 'SHID': '班次标识', 'SHPID': '班次剖面',
+    'SSHPID': '子班次', 'IQTY': '启动数量', 'IINT': '启动间隔',
     'SID': '系统标识', 'IID': '部件标识', 'DESCR': '名称 / 描述', 'NOTE': '备注',
     'FRT': '故障率', 'OPID': '运行参数', 'TYPE': '类型', 'GIID': '部件组',
     'GSID': '系统组', 'STID': '站点标识', 'MSTID': '上级站点', 'USTID': '单位 / 站点',

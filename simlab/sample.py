@@ -48,3 +48,21 @@ def demo_project():
                      'RCINT': '24', 'ENPM': 'N', 'ENLAT': 'N', 'ENALU': 'N', 'RELOP': 'SERIAL', 'ENLOG': 'Y'}],
     }
     return project
+
+
+def mission_project():
+    """20 vehicles, 15 required daily 08:00–16:00, maintenance starts 08:00–17:00."""
+    project = demo_project()
+    project['name'] = '示例 · 任务日历与维修班次'
+    t = project['tables']
+    t['SystemDeployment'][0]['UTIL'] = '1'
+    t['Control'][0].update(SIMPE='720', RCINT='1', NREPS='10')
+    t['MissionType'] = [{'MTID': 'DUTY', 'DESCR': '日间保障任务', 'NOS': '15', 'MNOS': '15', 'DURN': '8'}]
+    t['MissionSystem'] = [{'MTID': 'DUTY', 'SID': 'VEHICLE'}]
+    t['Operations'] = [{'USTID': 'FLEET', 'PRID': 'DAILY'}]
+    t['OperationProfile'] = [{'PRID': 'DAILY', 'SPRID': 'DUTY', 'STIM': str(day * 24 + 8)} for day in range(30)]
+    t['Shift'] = [{'SHID': 'WORK', 'DESCR': '维修白班'}]
+    t['ShiftProfile'] = [{'SHPID': 'DAY', 'SSHPID': 'WORK', 'STIM': str(day * 24 + 8),
+                          'ETIM': str(day * 24 + 17)} for day in range(30)]
+    t['ResourceStationData'] = [{'RID': 'TECH', 'STID': station, 'SHPID': 'DAY'} for station in ('BASE', 'DEPOT')]
+    return project

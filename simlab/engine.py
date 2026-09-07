@@ -7,19 +7,31 @@ import simpy
 from . import __version__
 from .compiler import compile_model
 from .project import model_hash, now
+from .missions import MissionManager, GAP_LABELS
 
 STATES = {'available': '可用', 'waiting_spare': '等待备件',
           'waiting_resource': '等待拆装资源', 'replacement': '拆装作业'}
 
 class ResourcePool:
     """Atomically acquire a complete resource bundle, strict FIFO per station."""
-    def __init__(self, env, capacities):
+    def __init__(self, env, capacities, schedules=None):
         self.env = env
         self.capacity = capacities.copy()
         self.free = capacities.copy()
         self.queue = []
         self.area = Counter()
         self.last = env.now
+        self.schedules = schedules or {}
+        if self.schedules:
+            env.process(self.openings())
+
+    def openings(self):
+        for time in sorted({start for spans in self.schedules.values() for start, _ in spans}):
+            yield self.env.timeout(time - self.env.now)
+            self.dispatch()
+
+    def on_shift(self, key):
+        return key not in self.schedules or any(start <= self.env.now < end for start, end in self.schedules[key])
 
     def update(self):
         elapsed = self.env.now - self.last
@@ -41,7 +53,7 @@ class ResourcePool:
         blocked = set()
         remaining = []
         for station, bundle, event in self.queue:
-            if station not in blocked and all(self.free.get(k, 0) >= q for k, q in bundle.items()):
+            if station not in blocked and all(self.free.get(k, 0) >= q and (q == 0 or self.on_shift(k)) for k, q in bundle.items()):
                 self.update()
                 for key, qty in bundle.items():
                     self.free[key] -= qty
@@ -64,7 +76,8 @@ def run_one(config, replication=0, progress=None):
     failure_rng = np.random.default_rng(np.random.SeedSequence([replication, 0, config['seed']]))
     repair_rng = np.random.default_rng(np.random.SeedSequence([replication, 1, config['seed']]))
     replace_rng = np.random.default_rng(np.random.SeedSequence([replication, 2, config['seed']]))
-    pool = ResourcePool(env, config['capacity'])
+    pool = ResourcePool(env, config['capacity'], config.get('schedules'))
+    mission_manager = None
     stores, locations, assets, events, samples = {}, {}, [], [], []
     failures = Counter()
     serial = 0
@@ -92,6 +105,8 @@ def run_one(config, replication=0, progress=None):
         asset['times'][asset['state']] += env.now - asset['last']
         asset['last'] = env.now
         asset['state'] = next_state
+        if mission_manager:
+            mission_manager.rebalance()
     def repair(fleet, iid, part):
         root, home = fleet['root'], fleet['home']
         locations[part] = 'transport'
@@ -119,7 +134,22 @@ def run_one(config, replication=0, progress=None):
         if total == 0:
             return
         while True:
-            yield env.timeout(float(failure_rng.exponential(1 / total)))
+            remaining = float(failure_rng.exponential(1 / total))
+            if mission_manager:
+                # Preserve the remaining running-time budget across standby
+                # periods and reassignment; do not resample at every dispatch.
+                while remaining > 0:
+                    if asset['mission'] is None:
+                        yield asset['assignment_event']
+                        continue
+                    start = env.now
+                    deadline = env.timeout(remaining)
+                    outcome = yield deadline | asset['assignment_event']
+                    # A completed timeout exhausts the budget exactly. Floating
+                    # subtraction can leave a sub-ULP remainder and loop forever.
+                    remaining = 0 if deadline in outcome else max(0, remaining - (env.now - start))
+            else:
+                yield env.timeout(remaining)
             slot = asset['slots'][int(failure_rng.choice(len(rates), p=rates / total))]
             iid, broken = slot['iid'], slot['token']
             failures[iid] += 1
@@ -154,19 +184,33 @@ def run_one(config, replication=0, progress=None):
                 for _ in range(part['quantity']):
                     slots.append({'iid': part['iid'], 'rate': part['rate'], 'token': token(part['iid'], 'installed')})
             asset = {'id': f"{fleet['sid']}@{fleet['unit']}-{index+1:03d}", 'slots': slots,
-                     'state': 'available', 'last': 0, 'times': Counter()}
+                     'state': 'available', 'last': 0, 'times': Counter(),
+                     'sid': fleet['sid'], 'unit': fleet['unit'], 'home': fleet['home'],
+                     'mission': None, 'assignment_event': env.event()}
             assets.append(asset)
             env.process(operate(asset, fleet))
+    if config.get('missions'):
+        mission_manager = MissionManager(env, config['missions'], assets, log)
     initial_parts = len(locations)
     def observe():
         while True:
-            samples.append({'time': env.now, 'available': sum(a['state'] == 'available' for a in assets) / len(assets)})
+            if mission_manager:
+                yield env.timeout(0)
+            sample = {'time': env.now, 'available': sum(a['state'] == 'available' for a in assets) / len(assets)}
+            if mission_manager:
+                sample.update(mission_manager.sample())
+            samples.append(sample)
             if progress:
                 progress(min(env.now / config['horizon'], 1))
             yield env.timeout(config['interval'])
     env.process(observe())
     env.run(until=config['horizon'])
-    samples.append({'time': env.now, 'available': sum(a['state'] == 'available' for a in assets) / len(assets)})
+    if mission_manager:
+        mission_manager.rebalance()
+    sample = {'time': env.now, 'available': sum(a['state'] == 'available' for a in assets) / len(assets)}
+    if mission_manager:
+        sample.update(mission_manager.sample())
+    samples.append(sample)
     totals = Counter()
     for asset in assets:
         state(asset, asset['state'])
@@ -183,6 +227,7 @@ def run_one(config, replication=0, progress=None):
     assert sum(loc == 'installed' for loc in locations.values()) == len(installed)
     assert sum(loc == 'stock' for loc in locations.values()) == len(stocked)
     return {'availability': totals['available'] / denominator, 'failures': sum(failures.values()),
+            'mission': mission_manager.finish() if mission_manager else None,
             'downtime': {s: totals[s] / len(assets) for s in STATES if s != 'available'},
             'samples': samples, 'events': events, 'events_truncated': event_count > len(events) if config['log'] and replication == 0 else False,
             'item_failures': dict(failures),
@@ -212,9 +257,28 @@ def simulate(tables, progress=None):
     half = t95(len(results)) * float(availability.std(ddof=1)) / math.sqrt(len(results)) if len(results) > 1 else None
     samples = [{'time': row['time'], 'available': float(np.mean([r['samples'][i]['available'] for r in results]))}
                for i, row in enumerate(results[0]['samples'])]
+    mission = None
+    if config['missions']:
+        for i, sample in enumerate(samples):
+            for key in ('demand', 'supplied'):
+                sample[key] = float(np.mean([r['samples'][i][key] for r in results]))
+        mission = {key: float(np.mean([r['mission'][key] for r in results]))
+                   for key in ('demand_hours', 'supplied_hours', 'gap_hours', 'fulfillment', 'full_window_rate')}
+        values = np.array([r['mission']['fulfillment'] for r in results])
+        margin = t95(len(results)) * float(values.std(ddof=1)) / math.sqrt(len(results)) if len(results) > 1 else None
+        mission['ci95'] = [max(0, mission['fulfillment']-margin), min(1, mission['fulfillment']+margin)] if margin is not None else None
+        mission['gap_reasons'] = {key: float(np.mean([r['mission']['gap_reasons'][key] for r in results])) for key in GAP_LABELS}
+        mission['tasks'] = []
+        for i, first in enumerate(results[0]['mission']['tasks']):
+            task = {key: first[key] for key in ('id', 'type', 'location', 'sid', 'quantity', 'start', 'end', 'demand_hours')}
+            for key in ('supplied_hours', 'gap_hours'):
+                task[key] = float(np.mean([r['mission']['tasks'][i][key] for r in results]))
+            task['full_window_rate'] = float(np.mean([r['mission']['tasks'][i]['gap_hours'] < 1e-9 for r in results]))
+            mission['tasks'].append(task)
     if progress:
         progress(1.0)
     return {'engine': __version__, 'created': now(), 'model_hash': model_hash(tables),
+            'mission': mission,
             'versions': {'python': platform.python_version(), 'simpy': simpy.__version__, 'numpy': np.__version__},
             'seed': config['seed'], 'replications': len(results), 'horizon': config['horizon'],
             'fleet_size': config['count'], 'point': config['point'], 'availability': mean,
@@ -225,4 +289,5 @@ def simulate(tables, progress=None):
             'resources': {key: float(np.mean([r['resources'][key] for r in results])) for key in results[0]['resources']},
             'events': results[0]['events'], 'events_truncated': results[0]['events_truncated'],
             'replication_results': [{k: v for k, v in r.items() if k not in ('samples', 'events')} for r in results],
-            'assumptions': '一层串联 LRU；连续使用率；指数故障；故障后系统暂停运行；两级维修闭环；资源组合原子申请；无任务调度。'}
+            'assumptions': '一层串联 LRU；指数故障；两级维修闭环；资源组合原子申请；班内启动、跨班继续。' +
+                ('固定需求窗口；先到先服务、不抢占；故障退出、即时补位；待命不累计运行故障。' if mission else '连续使用率；无任务调度。')}

@@ -3,8 +3,11 @@ import importlib.metadata
 from pathlib import Path
 import shutil
 import zipfile
+import sys
 
 root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root))
+from simlab import __version__
 folder = root/'dist'/'SimLab'
 for name in ['PySide6-Essentials', 'shiboken6', 'simpy', 'numpy', 'pyinstaller']:
     distribution = importlib.metadata.distribution(name)
@@ -16,7 +19,10 @@ for name in ['PySide6-Essentials', 'shiboken6', 'simpy', 'numpy', 'pyinstaller']
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
 shutil.copy2(root/'docs'/'VERIFICATION.md', folder/'VERIFICATION.md')
-output = root/'dist'/'SimLab-Windows-v0.1.0.zip'
+(folder/'docs').mkdir(exist_ok=True)
+for name in ['ARCHITECTURE.md', 'DIAGRAMS.md', 'V0.2.md']:
+    shutil.copy2(root/'docs'/name, folder/'docs'/name)
+output = root/'dist'/f'SimLab-Windows-v{__version__}.zip'
 with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
     for file in sorted(folder.rglob('*')):
         if file.is_file():

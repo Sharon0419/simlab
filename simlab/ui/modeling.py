@@ -141,7 +141,7 @@ class ModelEditor(QWidget):
         term = self.search.text().strip().lower()
         for name, node in self.nodes.items():
             haystack = name + ' ' + table_label(name) + ' ' + ' '.join(f['id'] for f in TABLES[name])
-            visible = (self.all_tables.isChecked() or name in CORE_TABLES or bool(term)) and term in haystack.lower()
+            visible = (self.all_tables.isChecked() or name in SUPPORTED or bool(term)) and term in haystack.lower()
             node.setHidden(not visible)
         for i in range(self.tree.topLevelItemCount()):
             group = self.tree.topLevelItem(i)

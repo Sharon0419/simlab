@@ -2,6 +2,7 @@
 import math
 from .schema import TABLES, value, effective
 from .validation import validate
+from .operations import SUPPORTED_OPERATIONS, compile_operations
 
 SUPPORTED = {
     'System': {'SID', 'FRT'},
@@ -22,6 +23,7 @@ SUPPORTED = {
                 'ENPM', 'ENLAT', 'ENALU', 'RELOP'},
 }
 DOCUMENTARY = {'DESCR', 'NOTE', 'UTXT1', 'UTXT2'}
+SUPPORTED.update(SUPPORTED_OPERATIONS)
 
 class ModelError(ValueError):
     def __init__(self, errors):
@@ -184,9 +186,13 @@ def compile_model(tables):
     estimated_failures = sum(f['quantity'] * f['util'] * sum(p['quantity']*p['rate'] for p in f['parts']) for f in fleets) * horizon
     if not math.isfinite(estimated_failures) or estimated_failures > 5000000:
         errors.append('故障事件规模过大：请降低故障率、设备数量或仿真时长。')
+    missions, schedules, operation_errors = compile_operations(
+        tables, fleets, capacity, repairs, replacements, horizon, reps)
+    errors.extend(operation_errors)
     if errors:
         raise ModelError(errors)
     return {'horizon': horizon, 'interval': interval, 'replications': reps, 'seed': seed,
             'remove_fraction': num('Control', c, 'RMVFR'), 'log': val('Control', c, 'ENLOG') == 'Y',
             'point': point, 'fleets': fleets, 'count': count, 'links': links, 'stock': stock,
-            'capacity': capacity, 'repairs': repairs, 'replacements': replacements}
+            'capacity': capacity, 'repairs': repairs, 'replacements': replacements,
+            'missions': missions, 'schedules': schedules}
