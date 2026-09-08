@@ -2,6 +2,7 @@
 from collections import Counter
 
 GAP_LABELS = {'fleet_shortage': '部署设备不足', 'busy': '其他任务占用',
+              'flight_aborted': '飞行故障中止', 'flight_unready': '起飞时就绪飞机不足',
               'relief': '补位准备与交接',
               'waiting_spare': '等待备件及运输', 'waiting_resource': '等待维修资源或班次',
               'replacement': '拆装作业'}

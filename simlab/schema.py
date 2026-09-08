@@ -6,6 +6,7 @@ from .extensions import TABLES as EXTENSION_TABLES
 SCHEMA = json.loads((Path(__file__).parent / 'data' / 'schema.json').read_text(encoding='utf-8'))
 TABLES = {**SCHEMA['tables'], **EXTENSION_TABLES}
 TABLE_LABELS = {
+    'SimLabFlightRule': '飞行与备用机规则（SimLab 扩展）',
     'SimLabDutyRule': '固定值守规则（SimLab 扩展）',
     'SimLabDepotProcess': '检测与测试（SimLab 扩展）',
     'System': '系统定义', 'Item': '备件 / 部件', 'MaterielStructure': '装备组成',
@@ -28,6 +29,7 @@ TABLE_LABELS = {
     'LateralSupport': '横向支援', 'OperationalModes': '运行模式',
 }
 FIELD_LABELS = {
+    'TFOUT': '出航时间比例（0～1）', 'TFRET': '返航时间比例（0～1）',
     'NOS': '需求设备数', 'MNOS': '最小设备数', 'MNOSA': '中止阈值',
     'DURN': '任务时长 / 小时', 'STIM': '开始 / 小时', 'ETIM': '结束 / 小时',
     'SPRID': '任务类型 / 子剖面', 'SHID': '班次标识', 'SHPID': '班次剖面',

@@ -1,0 +1,195 @@
+{
+  "replications": 1000,
+  "horizon_hours": 72,
+  "model_hash": "5f001e6c2b7631cbb1caca6719641ffe6ada39a58d49db6ffc5274a2d82a8dad",
+  "raw_result_sha256": "acc13087d84440e5c1839fea4e4ccb3b2f963a4bedc7f2274dc3c2c6d7775c96",
+  "project_path": "C:\\Users\\sharo\\AppData\\Local\\SimLab\\projects\\aircraft-1000-66c167d3-635.sqlite",
+  "statistics": {
+    "NMREQ": {
+      "mean": 9,
+      "std": 0.0,
+      "p05": 9,
+      "p95": 9,
+      "mean_ci95": [
+        9,
+        9
+      ]
+    },
+    "NMSTA_case": {
+      "mean": 9,
+      "std": 0.0,
+      "p05": 9,
+      "p95": 9,
+      "mean_ci95": [
+        9,
+        9
+      ]
+    },
+    "FMSTA_case": {
+      "mean": 1,
+      "std": 0.0,
+      "p05": 1,
+      "p95": 1,
+      "mean_ci95": [
+        1,
+        1
+      ]
+    },
+    "NSYRQ_total": {
+      "mean": 18,
+      "std": 0.0,
+      "p05": 18,
+      "p95": 18,
+      "mean_ci95": [
+        18,
+        18
+      ]
+    },
+    "NSYST_total_case": {
+      "mean": 18,
+      "std": 0.0,
+      "p05": 18,
+      "p95": 18,
+      "mean_ci95": [
+        18,
+        18
+      ]
+    },
+    "MTREQ": {
+      "mean": 18.0,
+      "std": 0.0,
+      "p05": 18.0,
+      "p95": 18.0,
+      "mean_ci95": [
+        18.0,
+        18.0
+      ]
+    },
+    "MTACC_case": {
+      "mean": 18.0,
+      "std": 0.0,
+      "p05": 18.0,
+      "p95": 18.0,
+      "mean_ci95": [
+        18.0,
+        18.0
+      ]
+    },
+    "MTF_case": {
+      "mean": 1,
+      "std": 0.0,
+      "p05": 1,
+      "p95": 1,
+      "mean_ci95": [
+        1,
+        1
+      ]
+    },
+    "STREQ": {
+      "mean": 36.0,
+      "std": 0.0,
+      "p05": 36.0,
+      "p95": 36.0,
+      "mean_ci95": [
+        36.0,
+        36.0
+      ]
+    },
+    "STACC": {
+      "mean": 36.0,
+      "std": 0.0,
+      "p05": 36.0,
+      "p95": 36.0,
+      "mean_ci95": [
+        36.0,
+        36.0
+      ]
+    },
+    "STF": {
+      "mean": 1.0,
+      "std": 0.0,
+      "p05": 1.0,
+      "p95": 1.0,
+      "mean_ci95": [
+        1.0,
+        1.0
+      ]
+    },
+    "completed_flight_windows": {
+      "mean": 9,
+      "std": 0.0,
+      "p05": 9,
+      "p95": 9,
+      "mean_ci95": [
+        9,
+        9
+      ]
+    },
+    "full_flight_window_rate": {
+      "mean": 1,
+      "std": 0.0,
+      "p05": 1,
+      "p95": 1,
+      "mean_ci95": [
+        1,
+        1
+      ]
+    },
+    "preparation_aircraft_hours": {
+      "mean": 9.0,
+      "std": 0.0,
+      "p05": 9.0,
+      "p95": 9.0,
+      "mean_ci95": [
+        9.0,
+        9.0
+      ]
+    },
+    "flight_gap_aircraft_hours": {
+      "mean": 0,
+      "std": 0.0,
+      "p05": 0,
+      "p95": 0,
+      "mean_ci95": [
+        0,
+        0
+      ]
+    },
+    "healthy_availability": {
+      "mean": 1.0,
+      "std": 0.0,
+      "p05": 1.0,
+      "p95": 1.0,
+      "mean_ci95": [
+        1.0,
+        1.0
+      ]
+    },
+    "failures": {
+      "mean": 0,
+      "std": 0.0,
+      "p05": 0,
+      "p95": 0,
+      "mean_ci95": [
+        0,
+        0
+      ]
+    },
+    "fleet_flight_utilization": {
+      "mean": 0.041666666666666664,
+      "std": 0.0,
+      "p05": 0.041666666666666664,
+      "p95": 0.041666666666666664,
+      "mean_ci95": [
+        0.041666666666666664,
+        0.041666666666666664
+      ]
+    }
+  },
+  "verification": [
+    "1000 per-replication assertions",
+    "input/result hash equality",
+    "SQLite full result roundtrip",
+    "simproj full result roundtrip"
+  ]
+}

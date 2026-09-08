@@ -1,0 +1,121 @@
+{
+  "project_path": "C:\\Users\\sharo\\AppData\\Local\\SimLab\\projects\\aircraft-three-days-9ada514d-340.sqlite",
+  "aircraft": 12,
+  "formations_per_wave": 1,
+  "days": 3,
+  "waves_per_day": 3,
+  "total_waves": 9,
+  "formation_sorties": 9,
+  "aircraft_sorties": 18,
+  "aircraft_flight_hours": 36,
+  "aircraft_preparation_hours": 9,
+  "combined_activity_hours": 45,
+  "mission_gap_hours": 0.0,
+  "minimum_rate": 1.0,
+  "qualified_rate": 1.0,
+  "seed": 20260908,
+  "model_hash": "01d4f00e15c2b5dc438d29b5c35aa5d10c9203be60df9de83eccc1144f88dcaf",
+  "schedule": [
+    {
+      "day": 1,
+      "wave": 1,
+      "preparation": 8.5,
+      "preparation_end": 9.0,
+      "departure": 9,
+      "landing": 11,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 1,
+      "wave": 2,
+      "preparation": 11,
+      "preparation_end": 11.5,
+      "departure": 12,
+      "landing": 14,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 1,
+      "wave": 3,
+      "preparation": 14,
+      "preparation_end": 14.5,
+      "departure": 15,
+      "landing": 17,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 2,
+      "wave": 1,
+      "preparation": 32.5,
+      "preparation_end": 33.0,
+      "departure": 33,
+      "landing": 35,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 2,
+      "wave": 2,
+      "preparation": 35,
+      "preparation_end": 35.5,
+      "departure": 36,
+      "landing": 38,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 2,
+      "wave": 3,
+      "preparation": 38,
+      "preparation_end": 38.5,
+      "departure": 39,
+      "landing": 41,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 3,
+      "wave": 1,
+      "preparation": 56.5,
+      "preparation_end": 57.0,
+      "departure": 57,
+      "landing": 59,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 3,
+      "wave": 2,
+      "preparation": 59,
+      "preparation_end": 59.5,
+      "departure": 60,
+      "landing": 62,
+      "formations": 1,
+      "aircraft": 2
+    },
+    {
+      "day": 3,
+      "wave": 3,
+      "preparation": 62,
+      "preparation_end": 62.5,
+      "departure": 63,
+      "landing": 65,
+      "formations": 1,
+      "aircraft": 2
+    }
+  ],
+  "checks": [
+    "input compile",
+    "12 aircraft conservation",
+    "9 waves",
+    "flight/preparation hour arithmetic",
+    "same two aircraft complete preparation before flight",
+    "no formation overlap",
+    "one hour turnaround interpretation",
+    "SQLite reopen",
+    "simproj import roundtrip"
+  ]
+}

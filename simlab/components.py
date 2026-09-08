@@ -87,7 +87,7 @@ class Components:
                          'site': root['site'], 'broken': r['broken']})
         return {'by_item': dict(counts), 'instances': rows, 'truncated': len(self.records) > len(rows)}
 
-    def failure(self, env, asset, fleet, rng, mission_mode):
+    def failure(self, env, asset, fleet, rng, mission_mode, stop_on_landing=False):
         leaves = []
         for slot in asset['slots']:
             parent = self.records[slot['token']]
@@ -98,11 +98,16 @@ class Components:
                     leaves.append((slot, r, specs[r['iid']]['rate'] * slot['envf'] * fleet['util']))
             else:
                 leaves.append((slot, parent, slot['rate'] * fleet['util']))
-        leaves = [(s, r, rate) for s, r, rate in leaves if rate > 0]
+        leaves = [(s, r, rate) for s, r, rate in leaves if rate > 0 and not r['broken']]
         for _, r, _ in leaves:
             if r['budget'] is None:
                 r['budget'] = float(rng.exponential(1.0))
         while True:
+            if stop_on_landing and asset['mission'] is None:
+                return None
+            if not leaves:
+                yield asset['assignment_event']
+                continue
             if mission_mode and asset['mission'] is None:
                 yield asset['assignment_event']
                 continue

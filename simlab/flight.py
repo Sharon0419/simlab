@@ -1,0 +1,196 @@
+"""Prepared reserve pool and atomic fixed flights; no airborne replacement.
+
+Phase fractions describe outbound travel, time on station, and return travel.
+Preparation has no failure exposure or resource contention. Availability is
+separate from readiness, and effective mission supply excludes aborted return.
+"""
+from collections import Counter
+from .missions import MissionManager
+
+
+class FlightManager(MissionManager):
+    def __init__(self, env, tasks, assets, log=None):
+        self.daily = {}
+        self.pools = {}
+        self.preparation_hours = 0.0
+        self.ready_hours = 0.0
+        for t in tasks:
+            pool = (t['location'], t['sid'])
+            day = int(t['start']//24)
+            key = (pool, day)
+            self.daily[key] = min(self.daily.get(key, float('inf')), t['start']-t['flight_prep_hours'])
+            self.pools[pool] = dict(prep=t['flight_prep_hours'], day=None)
+        for a in assets:
+            a.update(flight_phase='idle', prep_deadline=None, sorties=0)
+        super().__init__(env, tasks, assets, log)
+        for t in self.tasks:
+            duration=t['end']-t['start']
+            t.update(flight_status='scheduled', members=[], launched_at=None, ended_at=None,
+                     landed_at=None, landing_due=t['end'], abort_phase=None, phase=None,
+                     out_end=t['start']+duration*t.get('out_fraction',0),
+                     return_start=t['end']-duration*t.get('return_fraction',0),
+                     out_aircraft_hours=0.0, on_station_aircraft_hours=0.0,
+                     return_aircraft_hours=0.0, abort_return_aircraft_hours=0.0)
+
+    def normal_phase(self, task):
+        if self.env.now < task['out_end']:
+            return 'OUT'
+        if self.env.now < task['return_start']:
+            return 'ON_STATION'
+        return 'BACK'
+
+    def return_duration(self, task):
+        back=task['end']-task['return_start']
+        phase=self.normal_phase(task)
+        if phase=='OUT':
+            return back*(self.env.now-task['start'])/(task['out_end']-task['start'])
+        if phase=='ON_STATION':
+            return back
+        return max(0,task['end']-self.env.now)
+
+    def returning(self, task):
+        yield self.env.timeout(max(0,task['landing_due']-self.env.now))
+        self.rebalance()
+
+    def integrate(self):
+        elapsed = self.env.now-self.last
+        self.preparation_hours += elapsed*sum(a['flight_phase']=='preparing' for a in self.assets)
+        self.ready_hours += elapsed*sum(a['flight_phase']=='ready' for a in self.assets)
+        fields={'OUT':'out_aircraft_hours','ON_STATION':'on_station_aircraft_hours','BACK':'return_aircraft_hours'}
+        for t in self.tasks:
+            if t.get('phase') in fields and t['landed_at'] is None:
+                hours=elapsed*len(t['members'])
+                t[fields[t['phase']]] += hours
+                if t['flight_status']=='aborted':
+                    t['abort_return_aircraft_hours'] += hours
+        super().integrate()
+
+    def pool_for(self, asset):
+        return next((p for p in self.pools if p[1]==asset['sid'] and p[0] in (asset['unit'],asset['home'])), None)
+
+    def prepare(self, asset, pool):
+        asset['flight_phase'] = 'preparing'
+        deadline = self.env.now+self.pools[pool]['prep']
+        asset['prep_deadline'] = deadline
+        self.log(asset['id'], '开始出动保障', '')
+        if deadline == self.env.now:
+            asset['flight_phase'] = 'ready'
+            asset['prep_deadline'] = None
+            self.log(asset['id'], '保障完成待命', '')
+        else:
+            self.env.process(self.prepared(asset, deadline))
+
+    def prepared(self, asset, deadline):
+        yield self.env.timeout(deadline-self.env.now)
+        if asset['prep_deadline'] == deadline:
+            self.rebalance()
+
+    def rebalance(self):
+        self.integrate()
+        before = {a['id']: a['mission'] for a in self.assets}
+        # Complete flights before considering failures at their exact end boundary.
+        for t in self.tasks:
+            if t['flight_status'] not in ('launched','aborted') or t['landed_at'] is not None:
+                continue
+            members = [a for a in self.assets if a['mission']==t['id']]
+            ended = self.env.now >= t['landing_due']
+            failed = any(a['state']!='available' for a in members)
+            if t['flight_status']=='launched' and not ended and failed:
+                t['abort_phase']=self.normal_phase(t)
+                t['landing_due']=self.env.now+self.return_duration(t)
+                t['flight_status']='aborted'
+                t['ended_at'] = self.env.now
+                self.log(t['id'], '编队故障中止', f'{t["abort_phase"]};落地={t["landing_due"]:g}')
+                self.env.process(self.returning(t))
+                ended=self.env.now>=t['landing_due']
+            if ended:
+                if t['flight_status']=='launched':
+                    t['flight_status']='completed'
+                    t['ended_at']=self.env.now
+                t['landed_at']=self.env.now
+                t['phase']='LANDED'
+                self.log(t['id'], '编队任务完成' if t['flight_status']=='completed' else '中止编队落地', ','.join(t['members']))
+                for a in members:
+                    a['mission'] = None
+                    a['flight_phase'] = 'idle'
+            else:
+                phase='BACK' if t['flight_status']=='aborted' else self.normal_phase(t)
+                if phase!=t['phase']:
+                    self.log(t['id'], '飞行阶段', phase)
+                    t['phase']=phase
+                for a in members:
+                    a['flight_phase']=phase
+        for (pool, day), start in sorted(self.daily.items(), key=lambda x:x[1]):
+            if start <= self.env.now and (self.pools[pool]['day'] is None or self.pools[pool]['day'] < day):
+                self.pools[pool]['day'] = day
+                for a in self.assets:
+                    if self.pool_for(a)==pool and a['mission'] is None:
+                        a['flight_phase'] = 'idle'
+                        a['prep_deadline'] = None
+        for a in self.assets:
+            pool = self.pool_for(a)
+            if pool is None or a['mission'] is not None:
+                continue
+            if a['state'] != 'available':
+                a['flight_phase'] = 'maintenance'
+                a['prep_deadline'] = None
+            elif a['flight_phase']=='preparing' and a['prep_deadline'] <= self.env.now:
+                a['flight_phase'] = 'ready'
+                a['prep_deadline'] = None
+                self.log(a['id'], '保障完成待命', '')
+            elif a['flight_phase'] in ('idle','maintenance') and self.pools[pool]['day'] is not None:
+                self.prepare(a, pool)
+        self.active = [t for t in self.tasks if t['start'] <= self.env.now < t['end']]
+        for t in sorted(self.active, key=lambda x:(x['start'],x['id'])):
+            if t['flight_status'] != 'scheduled':
+                continue
+            candidates = sorted([a for a in self.assets if self.eligible(t,a) and a['state']=='available'
+                                 and a['mission'] is None and a['flight_phase']=='ready'],
+                                key=lambda a:(a['sorties'],a['id']))
+            if self.env.now != t['start'] or len(candidates)<t['quantity']:
+                t['flight_status'] = 'cancelled'
+                t['ended_at'] = self.env.now
+                self.log(t['id'], '准备就绪飞机不足取消', '')
+                continue
+            chosen = candidates[:t['quantity']]
+            t['flight_status'] = 'launched'
+            t['launched_at'] = self.env.now
+            t['members'] = [a['id'] for a in chosen]
+            t['phase']=self.normal_phase(t)
+            for a in chosen:
+                a['mission'] = t['id']
+                a['flight_phase'] = t['phase']
+                a['sorties'] += 1
+            self.log(t['id'], '编队统一起飞', ','.join(t['members']))
+            self.log(t['id'], '飞行阶段', t['phase'])
+        for a in self.assets:
+            if before[a['id']] != a['mission']:
+                signal = a['assignment_event']
+                a['assignment_event'] = self.env.event()
+                if not signal.triggered:
+                    signal.succeed()
+                self.log(a['id'], '任务分配' if a['mission'] else '退出任务', a['mission'] or '')
+        self.supply, self.reasons = {}, {}
+        for t in self.active:
+            n = t['quantity'] if t['flight_status']=='launched' else 0
+            self.supply[t['id']] = n
+            reason = 'flight_aborted' if t['flight_status']=='aborted' else 'flight_unready'
+            self.reasons[t['id']] = Counter({reason:t['quantity']-n})
+
+    def calendar(self):
+        for time in sorted({t[k] for t in self.tasks for k in ('start','out_end','return_start','end')} | set(self.daily.values())):
+            yield self.env.timeout(time-self.env.now)
+            self.rebalance()
+
+    def finish(self):
+        result = super().finish()
+        counts = Counter(t['flight_status'] for t in self.tasks)
+        result['flight'] = dict(requested=len(self.tasks), started=sum(t['launched_at'] is not None for t in self.tasks),
+            completed=counts['completed'], aborted=counts['aborted'], cancelled=counts['cancelled'],
+            aircraft_sorties=sum(len(t['members']) for t in self.tasks),
+            completed_aircraft_sorties=sum(len(t['members']) for t in self.tasks if t['flight_status']=='completed'),
+            preparation_aircraft_hours=self.preparation_hours, ready_aircraft_hours=self.ready_hours,
+            all_completed=int(counts['completed']==len(self.tasks)))
+        for key in ('out_aircraft_hours','on_station_aircraft_hours','return_aircraft_hours','abort_return_aircraft_hours'):
+            result['flight'][key]=sum(t[key] for t in self.tasks)
+        return result

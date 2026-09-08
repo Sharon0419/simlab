@@ -333,11 +333,14 @@ class MainWindow(QMainWindow):
         self.component_table = readonly_table(['实物编号', '部件类型', '父实物', '自身状态', '所在流程', '站点', '健康状态'])
         self.duty_table = readonly_table(['窗口', '目标 / 最低', '达标时间比例', '窗口合格率', '平均不达标 / 小时', '最长连续均值 / 小时'])
         self.duty_intervals = readonly_table(['首轮不达标窗口', '开始 / 小时', '结束 / 小时', '实际 / 最低', '缺口原因分摊（设备数）'])
+        self.flight_table = readonly_table(['飞行评估指标', '跨重复试验均值'])
+        self.flight_phase_table = readonly_table(['飞行任务', '计划出航 / 小时', '计划执行 / 小时', '计划返航 / 小时',
+                                                  '实际出航 / 架·小时', '实际执行 / 架·小时', '实际返航 / 架·小时', '其中中止返航 / 架·小时'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
                               ('首轮事件', self.events_table), ('实验对比', self.compare_table),
                               ('任务窗口', self.mission_table), ('任务缺口', self.gap_table),
                               ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table),
-                              ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals)]:
+                              ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals), ('飞行与备用机', self.flight_table), ('飞行阶段', self.flight_phase_table)]:
             tabs.addTab(widget, title)
         self.result_tabs = tabs
         layout.addWidget(tabs, 2)
@@ -368,6 +371,8 @@ class MainWindow(QMainWindow):
         <p>本机 SIMLOX 2017 的 DatabaseDictionary_SIMLOX.txt：133 张表，891 个字段。保留原字段代码、顺序、数据类型、默认值、单位、约束与关联。中文为辅助标签。</p>
         <p>字段层面的对齐不代表原厂引擎的数值等价。仅当前已实现的基础模型可以运行，其他表仍可编辑和交换。</p>
         <h3>运行口径</h3>
+        <p>0.6 飞行模式：在SimLabFlightRule填MTID、PREP_H；在MissionType填DURN、TFOUT、TFRET。比例各为0～1，和≤1；任务区比例自动为剩余部分。例如DURN=3、TFOUT=TFRET=1/6，对应出航0.5h、执行2h、返航0.5h。表格中比例须填数值小数。零比例兼容旧案例。飞行不得跨日，保障时间另算。出航中止按已出航比例折算返航，任务区中止按完整返航，返航中止按剩余时间；健康部件返航时仍可故障，飞机落地后才能维修或准备。多故障LRU落地后依次处理。</p>
+        <p>全部任务须为飞行模式，不能混用值守规则；同池保障时长一致。每日首波前全池保障，按累计出动少者优先选机。准点凑齐整队才能起飞，不足取消；故障整队中止、空中不补位。保障无资源约束、不累计故障。“飞行阶段”区分实际三阶段时间和中止返航时间；后者不计有效任务供给。本地完成判据不是原厂MSUCPT成功点。</p>
         <p>FRT=1000 且 OPID=OPHOURS，表示平均每 1000 个运行小时发生一次故障。UTIL=0.5 表示每个可用日历小时累计 0.5 个运行小时。</p>
         <p>串联关键部件故障使设备停机，停机期间不累计运行故障。层级模式保留健康叶子的剩余故障预算，修复叶子下次运行再抽样。暂不支持冗余、老化、预防性维修和供应中断。</p>
         <h3>0.2 任务与班次</h3>
@@ -769,7 +774,7 @@ class MainWindow(QMainWindow):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
         self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
         self.maintenance_export_button.setEnabled(bool(run and run['result'].get('maintenance')))
-        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals):
+        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table):
             table.setRowCount(0)
         if not run:
             for metric in self.result_cards:
@@ -802,10 +807,33 @@ class MainWindow(QMainWindow):
         mission = result.get('mission')
         self.mission_chart.set_samples(result['samples'] if mission else [])
         if mission:
+            flight = mission.get('flight')
+            if flight:
+                labels = {'requested':'计划编队任务 / 次', 'started':'实际起飞编队 / 次',
+                          'completed':'完整完成编队 / 次', 'aborted':'飞行中止编队 / 次',
+                          'cancelled':'起飞前取消 / 次', 'aircraft_sorties':'实际起飞 / 架次',
+                          'completed_aircraft_sorties':'完整完成 / 架次',
+                          'preparation_aircraft_hours':'出动保障 / 架·小时',
+                          'ready_aircraft_hours':'已保障待命 / 架·小时', 'all_completed':'整轮全部任务完成比例',
+                          'out_aircraft_hours':'实际出航 / 架·小时', 'on_station_aircraft_hours':'实际任务区执行 / 架·小时',
+                          'return_aircraft_hours':'实际返航 / 架·小时（含中止返航）', 'abort_return_aircraft_hours':'其中中止返航 / 架·小时'}
+                fill_table(self.flight_table, [[labels[k], f'{v:.2%}' if k=='all_completed' else f'{v:.3f}'] for k,v in flight.items()])
+                phase_rows=[]
+                for t in mission['tasks']:
+                    if 'out_fraction' not in t:
+                        continue
+                    duration=t['end']-t['start']
+                    phase_rows.append([t['id'], f'{duration*t["out_fraction"]:.3f}',
+                        f'{duration*(1-t["out_fraction"]-t["return_fraction"]):.3f}', f'{duration*t["return_fraction"]:.3f}',
+                        *[f'{t[k]:.3f}' for k in ('out_aircraft_hours','on_station_aircraft_hours','return_aircraft_hours','abort_return_aircraft_hours')]])
+                fill_table(self.flight_phase_table,phase_rows)
             ci = mission['ci95']
             interval = f'{ci[0]:.1%}–{ci[1]:.1%}' if ci else '单次试验'
             self.mission_summary.setText(f'设备小时满足率 {mission["fulfillment"]:.2%} · 均值95%区间 {interval} · 全程无缺口窗口 {mission["full_window_rate"]:.1%}\n平均缺口 {mission["gap_hours"]:.2f} 设备小时；曲线按采样间隔显示，指标按事件积分。')
-            if 'minimum_rate' in mission:
+            if flight:
+                phase_note='三阶段时间见“飞行阶段”；中止后返航不计有效任务供给。' if 'return_aircraft_hours' in flight else '历史结果：返航耗时按0。'
+                self.mission_summary.setText(self.mission_summary.text()+f'\n飞行模式：整队起飞、故障中止、空中不补位；完整完成 {flight["completed"]:.3f}/{flight["requested"]:g} 次，整轮全部完成 {flight["all_completed"]:.2%}。{phase_note}')
+            if 'minimum_rate' in mission and not flight:
                 detail_note = '（已截断）' if mission.get('intervals_truncated') else ''
                 self.mission_summary.setText(self.mission_summary.text() + f'\n最低保障达标率 {mission["minimum_rate"]:.2%} · 值守窗口合格率 {mission["qualified_rate"]:.2%}；不达标时段为首轮、最多5000条{detail_note}。合计曲线不能代替各任务判定。')
                 fill_table(self.duty_table, [[t['id'], f'{t["quantity"]} / {t["minimum"]}', f'{t["minimum_rate"]:.2%}',
@@ -818,7 +846,7 @@ class MainWindow(QMainWindow):
             self.mission_summary.setText('本实验没有任务日历。旧版本实验仍可查看可用度与保障结果。')
             self.mission_table.setRowCount(0)
             self.gap_table.setRowCount(0)
-        names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源或班次', 'replacement': '拆卸与安装作业'}
+        names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源或班次', 'replacement': '拆卸与安装作业', 'returning_failed':'故障返航（尚未落地）'}
         total = sum(result['downtime'].values())
         fill_table(self.downtime_table, [[names[key], f'{val:.2f}', f'{val/total:.1%}' if total else '0%'] for key, val in result['downtime'].items()])
         fill_table(self.resource_table, [[key, f'{val:.1%}'] for key, val in result['resources'].items()])

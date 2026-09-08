@@ -121,6 +121,9 @@ class DutyPlanner(QWidget):
         try:
             self.show_windows(compile_model(tables)['missions'])
             self.message.setText('当前全部值守窗口。新增计划先预览再添加；结束时刻固定，补齐不消除历史缺口。')
+            if tables.get('SimLabFlightRule'):
+                self.message.setText('当前为飞行计划：仅查看起飞时段。请在模型数据编辑 SimLabFlightRule 和 OperationProfile；值守补位规则不适用于飞行。')
+                self.save_button.setEnabled(False)
         except ValueError as error:
             self.grid.setRowCount(0)
             self.message.setText('模型尚未通过校验：' + str(error)[:1000])

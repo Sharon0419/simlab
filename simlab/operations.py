@@ -7,8 +7,9 @@ from .schema import value
 
 
 SUPPORTED_OPERATIONS = {
+    'SimLabFlightRule': {'MTID', 'PREP_H'},
     'SimLabDutyRule': {'MTID', 'MIN_QTY', 'PRIORITY', 'RELIEF_H', 'TOLERANCE_H'},
-    'MissionType': {'MTID', 'NOS', 'MNOS', 'MNOSA', 'DURN'},
+    'MissionType': {'MTID', 'NOS', 'MNOS', 'MNOSA', 'DURN', 'TFOUT', 'TFRET'},
     'MissionSystem': {'MTID', 'SID', 'NOS', 'MNOS', 'MNOSA'},
     'Operations': {'USTID', 'PRID'},
     'OperationProfile': {'PRID', 'SPRID', 'STIM'},
@@ -95,6 +96,38 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
     if len(missions) > 2000 or len(missions) * reps > 200000:
         errors.append('Operations: 任务窗口≤2000，任务窗口数×重复次数≤200000。')
     missions.sort(key=lambda m: (m['start'], m['id']))
+    flight_rules = {r['MTID']: float(r['PREP_H']) for r in tables.get('SimLabFlightRule', [])}
+    for tid, spec in types.items():
+        out, back = float(val('MissionType',spec,'TFOUT')), float(val('MissionType',spec,'TFRET'))
+        if out+back > 1:
+            errors.append(f'MissionType.{tid}: TFOUT+TFRET不能超过1。')
+        if (out or back) and tid not in flight_rules:
+            errors.append(f'MissionType.{tid}: 非零阶段比例需要SimLabFlightRule飞行模式。')
+    if flight_rules:
+        pools = {}
+        for task in missions:
+            if task['type'] not in flight_rules:
+                errors.append('SimLabFlightRule: 飞行模式不能与固定值守混合；所有任务类型都需配置飞行规则。')
+                continue
+            if task['type'] in duty:
+                errors.append('SimLabFlightRule: 同一任务不能同时配置 SimLabDutyRule。')
+            task['flight_prep_hours'] = flight_rules[task['type']]
+            spec = types[task['type']]
+            task['out_fraction'] = float(val('MissionType',spec,'TFOUT'))
+            task['return_fraction'] = float(val('MissionType',spec,'TFRET'))
+            day = int(task['start']//24)
+            if task['end'] > (day+1)*24 or task['start']-day*24 < task['flight_prep_hours']:
+                errors.append('SimLabFlightRule: 保障开始不得早于当天00:00，飞行不得跨日。')
+            pool = (task['location'], task['sid'])
+            pools.setdefault(pool, set()).add(task['flight_prep_hours'])
+        if not missions:
+            errors.append('SimLabFlightRule: 必须配置飞行任务计划。')
+        if any(len(v)>1 for v in pools.values()):
+            errors.append('SimLabFlightRule: 同一选机池的保障时长须一致。')
+        for fleet in fleets:
+            matching = [pool for pool in pools if pool[1] == fleet['sid'] and pool[0] in (fleet['unit'], fleet['home'])]
+            if len(matching)>1:
+                errors.append('SimLabFlightRule: 同一装备不能同时属于站点与单位两个重叠选机池。')
     shifts = {r['SHID'] for r in tables.get('Shift', [])}
     windows = {}
     for row in tables.get('ShiftProfile', []):

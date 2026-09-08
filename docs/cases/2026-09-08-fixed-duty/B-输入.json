@@ -1,0 +1,835 @@
+{
+  "System": [
+    {
+      "SID": "VEHICLE",
+      "DESCR": "通用保障车辆",
+      "FRT": "0"
+    }
+  ],
+  "Item": [
+    {
+      "IID": "POWER",
+      "DESCR": "动力模块",
+      "TYPE": "LRU",
+      "FRT": "0"
+    },
+    {
+      "IID": "CONTROL",
+      "DESCR": "控制模块",
+      "TYPE": "LRU",
+      "FRT": "800"
+    },
+    {
+      "IID": "PUMP",
+      "DESCR": "液压泵",
+      "TYPE": "LRU",
+      "FRT": "1600"
+    },
+    {
+      "IID": "BOARD",
+      "DESCR": "动力模块控制板",
+      "TYPE": "SRU",
+      "FRT": "6000"
+    }
+  ],
+  "MaterielStructure": [
+    {
+      "MID": "POWER",
+      "MMID": "VEHICLE",
+      "QTYPM": "1"
+    },
+    {
+      "MID": "CONTROL",
+      "MMID": "VEHICLE",
+      "QTYPM": "1"
+    },
+    {
+      "MID": "PUMP",
+      "MMID": "VEHICLE",
+      "QTYPM": "2"
+    },
+    {
+      "MID": "BOARD",
+      "MMID": "POWER",
+      "QTYPM": "1"
+    }
+  ],
+  "Station": [
+    {
+      "STID": "BASE",
+      "DESCR": "使用基地",
+      "TYPE": "OP"
+    },
+    {
+      "STID": "DEPOT",
+      "DESCR": "修理中心",
+      "TYPE": "DEPOT"
+    }
+  ],
+  "StationStructure": [
+    {
+      "STID": "BASE",
+      "MSTID": "DEPOT",
+      "TFRMS": "12",
+      "TTOMS": "12"
+    }
+  ],
+  "Unit": [
+    {
+      "UNID": "FLEET",
+      "DESCR": "车辆分队",
+      "STID": "BASE"
+    }
+  ],
+  "SystemDeployment": [
+    {
+      "SID": "VEHICLE",
+      "USTID": "FLEET",
+      "QTYPS": "20",
+      "UTIL": "1"
+    }
+  ],
+  "StockAllocation": [
+    {
+      "POINT": "BASELINE",
+      "IID": "POWER",
+      "STID": "BASE",
+      "STSIZ": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "POWER",
+      "STID": "DEPOT",
+      "STSIZ": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "CONTROL",
+      "STID": "BASE",
+      "STSIZ": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "CONTROL",
+      "STID": "DEPOT",
+      "STSIZ": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "PUMP",
+      "STID": "BASE",
+      "STSIZ": "3"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "PUMP",
+      "STID": "DEPOT",
+      "STSIZ": "3"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "BOARD",
+      "STID": "DEPOT",
+      "STSIZ": "1"
+    }
+  ],
+  "ItemRepair": [
+    {
+      "IID": "CONTROL",
+      "STID": "DEPOT",
+      "DIRPT": "24",
+      "SURPT": "0",
+      "DIRPTID": "REPAIR",
+      "DIRPD": "<EXP>"
+    },
+    {
+      "IID": "PUMP",
+      "STID": "DEPOT",
+      "DIRPT": "36",
+      "SURPT": "0",
+      "DIRPTID": "REPAIR",
+      "DIRPD": "<EXP>"
+    },
+    {
+      "IID": "BOARD",
+      "STID": "DEPOT",
+      "DIRPT": "16",
+      "SURPT": "0",
+      "DIRPTID": "REPAIR"
+    }
+  ],
+  "ItemReplacement": [
+    {
+      "MID": "VEHICLE",
+      "IID": "POWER",
+      "STID": "BASE",
+      "SURPT": "2",
+      "SURPTID": "REPLACE"
+    },
+    {
+      "MID": "VEHICLE",
+      "IID": "CONTROL",
+      "STID": "BASE",
+      "SURPT": "2",
+      "SURPTID": "REPLACE"
+    },
+    {
+      "MID": "VEHICLE",
+      "IID": "PUMP",
+      "STID": "BASE",
+      "SURPT": "2",
+      "SURPTID": "REPLACE"
+    },
+    {
+      "MID": "POWER",
+      "IID": "BOARD",
+      "STID": "DEPOT",
+      "SURPT": "2",
+      "SURPTID": "REPLACE"
+    }
+  ],
+  "Resource": [
+    {
+      "RID": "TECH",
+      "DESCR": "维修人员",
+      "TYPE": "SPECIAL"
+    },
+    {
+      "RID": "BAY",
+      "DESCR": "维修工位",
+      "TYPE": "SPECIAL"
+    }
+  ],
+  "ResourceAllocation": [
+    {
+      "POINT": "BASELINE",
+      "RID": "TECH",
+      "STID": "BASE",
+      "RQTY": "3"
+    },
+    {
+      "POINT": "BASELINE",
+      "RID": "TECH",
+      "STID": "DEPOT",
+      "RQTY": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "RID": "BAY",
+      "STID": "DEPOT",
+      "RQTY": "2"
+    }
+  ],
+  "Tasks": [
+    {
+      "TID": "REPLACE",
+      "DESCR": "部件拆装"
+    },
+    {
+      "TID": "REPAIR",
+      "DESCR": "部件修复"
+    },
+    {
+      "TID": "INSPECT",
+      "DESCR": "模块检测与修后测试"
+    }
+  ],
+  "TaskResource": [
+    {
+      "TID": "REPLACE",
+      "RID": "TECH"
+    },
+    {
+      "TID": "REPAIR",
+      "RID": "TECH"
+    },
+    {
+      "TID": "REPAIR",
+      "RID": "BAY"
+    },
+    {
+      "TID": "INSPECT",
+      "RID": "TECH",
+      "QTY": "1"
+    },
+    {
+      "TID": "INSPECT",
+      "RID": "BAY",
+      "QTY": "1"
+    }
+  ],
+  "Control": [
+    {
+      "NREPS": "100",
+      "SIMPE": "720",
+      "RSEED": "20260908",
+      "APID": "BASELINE",
+      "RCINT": "0.25",
+      "ENPM": "N",
+      "ENLAT": "N",
+      "ENALU": "N",
+      "RELOP": "SERIAL",
+      "ENLOG": "Y"
+    }
+  ],
+  "MissionType": [
+    {
+      "MTID": "DUTY",
+      "DESCR": "日间保障任务",
+      "NOS": "15",
+      "MNOS": "15",
+      "DURN": "8"
+    },
+    {
+      "MTID": "PEAK",
+      "DESCR": "PEAK",
+      "NOS": "4",
+      "MNOS": "4",
+      "DURN": "4"
+    }
+  ],
+  "MissionSystem": [
+    {
+      "MTID": "DUTY",
+      "SID": "VEHICLE"
+    },
+    {
+      "MTID": "PEAK",
+      "SID": "VEHICLE"
+    }
+  ],
+  "Operations": [
+    {
+      "USTID": "FLEET",
+      "PRID": "DAILY"
+    }
+  ],
+  "OperationProfile": [
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "8"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "32"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "56"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "80"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "104"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "128"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "152"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "176"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "200"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "224"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "248"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "272"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "296"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "320"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "344"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "368"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "392"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "416"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "440"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "464"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "488"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "512"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "536"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "560"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "584"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "608"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "632"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "656"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "680"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "DUTY",
+      "STIM": "704"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "10"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "34"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "58"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "82"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "106"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "130"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "154"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "178"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "202"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "226"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "250"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "274"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "298"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "322"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "346"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "370"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "394"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "418"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "442"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "466"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "490"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "514"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "538"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "562"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "586"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "610"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "634"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "658"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "682"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "PEAK",
+      "STIM": "706"
+    }
+  ],
+  "Shift": [
+    {
+      "SHID": "WORK",
+      "DESCR": "维修白班"
+    }
+  ],
+  "ShiftProfile": [
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "8",
+      "ETIM": "17"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "32",
+      "ETIM": "41"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "56",
+      "ETIM": "65"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "80",
+      "ETIM": "89"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "104",
+      "ETIM": "113"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "128",
+      "ETIM": "137"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "152",
+      "ETIM": "161"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "176",
+      "ETIM": "185"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "200",
+      "ETIM": "209"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "224",
+      "ETIM": "233"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "248",
+      "ETIM": "257"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "272",
+      "ETIM": "281"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "296",
+      "ETIM": "305"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "320",
+      "ETIM": "329"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "344",
+      "ETIM": "353"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "368",
+      "ETIM": "377"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "392",
+      "ETIM": "401"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "416",
+      "ETIM": "425"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "440",
+      "ETIM": "449"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "464",
+      "ETIM": "473"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "488",
+      "ETIM": "497"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "512",
+      "ETIM": "521"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "536",
+      "ETIM": "545"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "560",
+      "ETIM": "569"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "584",
+      "ETIM": "593"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "608",
+      "ETIM": "617"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "632",
+      "ETIM": "641"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "656",
+      "ETIM": "665"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "680",
+      "ETIM": "689"
+    },
+    {
+      "SHPID": "DAY",
+      "SSHPID": "WORK",
+      "STIM": "704",
+      "ETIM": "713"
+    }
+  ],
+  "ResourceStationData": [
+    {
+      "RID": "TECH",
+      "STID": "BASE",
+      "SHPID": "DAY"
+    },
+    {
+      "RID": "TECH",
+      "STID": "DEPOT",
+      "SHPID": "DAY"
+    }
+  ],
+  "SimLabDepotProcess": [
+    {
+      "LRU": "POWER",
+      "STATION": "DEPOT",
+      "DIAG_H": "1",
+      "DIAG_TASK": "INSPECT",
+      "TEST_H": "1",
+      "TEST_TASK": "INSPECT"
+    }
+  ],
+  "SimLabDutyRule": [
+    {
+      "MTID": "DUTY",
+      "MIN_QTY": "13",
+      "PRIORITY": "2",
+      "RELIEF_H": ".25",
+      "TOLERANCE_H": ".25"
+    },
+    {
+      "MTID": "PEAK",
+      "MIN_QTY": "3",
+      "PRIORITY": "1",
+      "RELIEF_H": ".25",
+      "TOLERANCE_H": "0.25"
+    }
+  ]
+}

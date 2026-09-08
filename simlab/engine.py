@@ -8,10 +8,12 @@ from . import __version__
 from .compiler import compile_model
 from .project import model_hash, now
 from .missions import MissionManager, GAP_LABELS
+from .flight import FlightManager
 from .components import Components
 from .maintenance import Workshop, aggregate as aggregate_maintenance
 
 STATES = {'available': '可用', 'waiting_spare': '等待备件',
+          'returning_failed': '故障返航（尚未落地）',
           'waiting_resource': '等待拆装资源', 'replacement': '拆装作业'}
 
 class ResourcePool:
@@ -120,6 +122,7 @@ def run_one(config, replication=0, progress=None):
         locations[part] = 'repair'
         yield env.timeout(duration(rule['time'], repair_rng))
         pool.release(root, rule['resources'])
+        components.restore(part)
         locations[part] = 'stock'
         yield store(root, iid).put(part)
         log(root, '部件修复返库', iid)
@@ -130,6 +133,38 @@ def run_one(config, replication=0, progress=None):
         components.move(part, 'stock', fleet['home'])
         yield store(fleet['home'], iid).put(part)
         log(fleet['home'], '补充备件到达', iid)
+    def repair_slot(asset, fleet, slot):
+        iid, broken = slot['iid'], slot['token']
+        rule = config['replacements'][(fleet['sid'], iid, fleet['home'])]
+        replacement_time = duration(rule['time'], replace_rng)
+        state(asset, 'waiting_resource')
+        yield pool.request(fleet['home'], rule['resources'])
+        state(asset, 'replacement')
+        yield env.timeout(replacement_time * config['remove_fraction'])
+        pool.release(fleet['home'], rule['resources'])
+        slot['token'] = None
+        env.process(repair(fleet, iid, broken))
+        if fleet['root'] != fleet['home']:
+            env.process(replenish(fleet, iid))
+        state(asset, 'waiting_spare')
+        spare = yield store(fleet['home'], iid).get()
+        components.move(spare, 'held', fleet['home'])
+        state(asset, 'waiting_resource')
+        yield pool.request(fleet['home'], rule['resources'])
+        state(asset, 'replacement')
+        yield env.timeout(replacement_time * (1-config['remove_fraction']))
+        pool.release(fleet['home'], rule['resources'])
+        slot['token'] = spare
+        components.move(spare, 'installed', fleet['home'])
+
+    def record_failure(asset, slot, leaf):
+        components.fail(slot['token'], leaf)
+        iid=components.records[leaf]['iid']
+        failures[iid] += 1
+        log(asset['id'], '发生故障', iid)
+        if workshop:
+            log(slot['token'], '故障叶子', leaf)
+
     def operate(asset, fleet):
         rates = np.array([p['rate'] * fleet['util'] for p in asset['slots']], dtype=float)
         total = float(rates.sum())
@@ -138,7 +173,6 @@ def run_one(config, replication=0, progress=None):
         while True:
             if workshop:
                 slot, leaf = yield from components.failure(env, asset, fleet, failure_rng, bool(mission_manager))
-                components.fail(slot['token'], leaf)
             else:
                 remaining = float(failure_rng.exponential(1 / total))
             if not workshop and mission_manager:
@@ -158,35 +192,25 @@ def run_one(config, replication=0, progress=None):
                 yield env.timeout(remaining)
             if not workshop:
                 slot = asset['slots'][int(failure_rng.choice(len(rates), p=rates / total))]
-            iid, broken = slot['iid'], slot['token']
-            failed_iid = components.records[leaf]['iid'] if workshop else iid
-            failures[failed_iid] += 1
-            log(asset['id'], '发生故障', failed_iid)
-            if workshop:
-                log(broken, '故障叶子', leaf)
-            rule = config['replacements'][(fleet['sid'], iid, fleet['home'])]
-            replacement_time = duration(rule['time'], replace_rng)
-            state(asset, 'waiting_resource')
-            yield pool.request(fleet['home'], rule['resources'])
-            state(asset, 'replacement')
-            yield env.timeout(replacement_time * config['remove_fraction'])
-            pool.release(fleet['home'], rule['resources'])
-            slot['token'] = None
-            env.process(repair(fleet, iid, broken))
-            if fleet['root'] != fleet['home']:
-                env.process(replenish(fleet, iid))
-            state(asset, 'waiting_spare')
-            spare = yield store(fleet['home'], iid).get()
-            components.move(spare, 'held', fleet['home'])
-            state(asset, 'waiting_resource')
-            yield pool.request(fleet['home'], rule['resources'])
-            state(asset, 'replacement')
-            yield env.timeout(replacement_time * (1-config['remove_fraction']))
-            pool.release(fleet['home'], rule['resources'])
-            slot['token'] = spare
-            components.move(spare, 'installed', fleet['home'])
+                leaf = slot['token']
+            record_failure(asset, slot, leaf)
+            pending_slots=[slot]
+            if isinstance(mission_manager, FlightManager) and asset['mission'] is not None:
+                state(asset, 'returning_failed')
+                # No repair starts in the air. Remaining healthy components can
+                # still fail; each failed LRU enters the repair queue once.
+                while asset['mission'] is not None:
+                    extra = yield from components.failure(env,asset,fleet,failure_rng,True,stop_on_landing=True)
+                    if extra is None:
+                        break
+                    extra_slot, extra_leaf = extra
+                    record_failure(asset,extra_slot,extra_leaf)
+                    if extra_slot not in pending_slots:
+                        pending_slots.append(extra_slot)
+            for broken_slot in pending_slots:
+                yield from repair_slot(asset,fleet,broken_slot)
             state(asset, 'available')
-            log(asset['id'], '恢复可用', iid)
+            log(asset['id'], '恢复可用', ','.join(s['iid'] for s in pending_slots))
     for fleet in config['fleets']:
         for index in range(fleet['quantity']):
             slots = []
@@ -200,7 +224,8 @@ def run_one(config, replication=0, progress=None):
             assets.append(asset)
             env.process(operate(asset, fleet))
     if config.get('missions'):
-        mission_manager = MissionManager(env, config['missions'], assets, log)
+        manager_type = FlightManager if 'flight_prep_hours' in config['missions'][0] else MissionManager
+        mission_manager = manager_type(env, config['missions'], assets, log)
     initial_parts = len(locations)
     initial_by_item = dict(Counter(r['iid'] for r in components.records.values()))
     def observe():
@@ -294,12 +319,23 @@ def simulate(tables, progress=None):
         mission['ci95'] = [max(0, mission['fulfillment']-margin), min(1, mission['fulfillment']+margin)] if margin is not None else None
         mission['gap_reasons'] = {key: float(np.mean([r['mission']['gap_reasons'][key] for r in results])) for key in GAP_LABELS}
         mission['tasks'] = []
+        if results[0]['mission'].get('flight'):
+            mission['flight'] = {key: float(np.mean([r['mission']['flight'][key] for r in results]))
+                                 for key in results[0]['mission']['flight']}
         for i, first in enumerate(results[0]['mission']['tasks']):
             task = {key: first[key] for key in ('id', 'type', 'location', 'sid', 'quantity', 'start', 'end', 'demand_hours', 'minimum', 'priority', 'relief_hours', 'tolerance_hours')}
             for key in ('supplied_hours', 'gap_hours', 'below_hours', 'longest_below_hours', 'minimum_rate'):
                 task[key] = float(np.mean([r['mission']['tasks'][i][key] for r in results]))
             task['full_window_rate'] = float(np.mean([r['mission']['tasks'][i]['gap_hours'] < 1e-9 for r in results]))
             task['qualified_rate'] = float(np.mean([r['mission']['tasks'][i]['qualified'] for r in results]))
+            if 'flight_status' in first:
+                task['flight_prep_hours'] = first['flight_prep_hours']
+                task['out_fraction'] = first.get('out_fraction',0)
+                task['return_fraction'] = first.get('return_fraction',0)
+                for key in ('out_aircraft_hours','on_station_aircraft_hours','return_aircraft_hours','abort_return_aircraft_hours'):
+                    task[key] = float(np.mean([r['mission']['tasks'][i][key] for r in results]))
+                task['flight_rates'] = {status: float(np.mean([r['mission']['tasks'][i]['flight_status']==status for r in results]))
+                                       for status in ('completed','aborted','cancelled')}
             mission['tasks'].append(task)
     if progress:
         progress(1.0)
@@ -318,4 +354,5 @@ def simulate(tables, progress=None):
             'events': results[0]['events'], 'events_truncated': results[0]['events_truncated'],
             'replication_results': [{k: v for k, v in r.items() if k not in ('samples', 'events', 'components', 'maintenance')} for r in results],
             'assumptions': ('System/LRU/SRU 串联；基地换LRU、站内维修SRU；叶子指数故障；' if config.get('children') else '一层串联 LRU；指数故障；') + '两级维修闭环；资源组合原子申请；班内启动、跨班继续。' +
-                ('固定值守窗口；优先级分配、不抢占；故障退出、按规则准备补位；待命和准备不累计运行故障；最低保障按事件积分。' if mission else '连续使用率；无任务调度。')}
+                ('固定飞行；每日全池保障；整队起飞/故障中止；空中不补位；TFOUT/TFRET三阶段及中止返航；返航健康部件继续故障，落地后故障LRU依次处理；保障无资源约束且不累计故障。' if mission and mission.get('flight') else
+                 '固定值守窗口；优先级分配、不抢占；故障退出、按规则准备补位；待命和准备不累计运行故障；最低保障按事件积分。' if mission else '连续使用率；无任务调度。')}

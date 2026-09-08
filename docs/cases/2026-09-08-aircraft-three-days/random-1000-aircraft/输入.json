@@ -1,0 +1,342 @@
+{
+  "System": [
+    {
+      "SID": "AIRCRAFT",
+      "DESCR": "飞机：4类关键组件，随机故障与修复",
+      "FRT": "0"
+    }
+  ],
+  "Item": [
+    {
+      "IID": "POWERPLANT",
+      "TYPE": "LRU",
+      "DESCR": "动力组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    },
+    {
+      "IID": "AVIONICS",
+      "TYPE": "LRU",
+      "DESCR": "航电组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    },
+    {
+      "IID": "ELECTRICAL",
+      "TYPE": "LRU",
+      "DESCR": "电源组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    },
+    {
+      "IID": "HYDRAULIC",
+      "TYPE": "LRU",
+      "DESCR": "液压组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    }
+  ],
+  "MaterielStructure": [
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "POWERPLANT",
+      "QTYPM": "1",
+      "ENVF": "1"
+    },
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "AVIONICS",
+      "QTYPM": "1",
+      "ENVF": "1"
+    },
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "ELECTRICAL",
+      "QTYPM": "1",
+      "ENVF": "1"
+    },
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "HYDRAULIC",
+      "QTYPM": "1",
+      "ENVF": "1"
+    }
+  ],
+  "Station": [
+    {
+      "STID": "AIRPORT",
+      "TYPE": "OP",
+      "DESCR": "机场"
+    }
+  ],
+  "Unit": [
+    {
+      "UNID": "F01",
+      "STID": "AIRPORT",
+      "DESCR": "第1双机编队"
+    },
+    {
+      "UNID": "RESERVE",
+      "STID": "AIRPORT",
+      "DESCR": "10架备用飞机（本排程不轮换）"
+    }
+  ],
+  "SystemDeployment": [
+    {
+      "SID": "AIRCRAFT",
+      "USTID": "F01",
+      "QTYPS": "2",
+      "UTIL": "1"
+    },
+    {
+      "SID": "AIRCRAFT",
+      "USTID": "RESERVE",
+      "QTYPS": "10",
+      "UTIL": "1"
+    }
+  ],
+  "StockAllocation": [
+    {
+      "POINT": "AIRCASE",
+      "IID": "POWERPLANT",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "AIRCASE",
+      "IID": "AVIONICS",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "AIRCASE",
+      "IID": "ELECTRICAL",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "AIRCASE",
+      "IID": "HYDRAULIC",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    }
+  ],
+  "ItemRepair": [
+    {
+      "IID": "POWERPLANT",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    },
+    {
+      "IID": "AVIONICS",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    },
+    {
+      "IID": "ELECTRICAL",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    },
+    {
+      "IID": "HYDRAULIC",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    }
+  ],
+  "ItemReplacement": [
+    {
+      "MID": "AIRCRAFT",
+      "IID": "POWERPLANT",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    },
+    {
+      "MID": "AIRCRAFT",
+      "IID": "AVIONICS",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    },
+    {
+      "MID": "AIRCRAFT",
+      "IID": "ELECTRICAL",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    },
+    {
+      "MID": "AIRCRAFT",
+      "IID": "HYDRAULIC",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    }
+  ],
+  "MissionType": [
+    {
+      "MTID": "PREFLIGHT",
+      "DESCR": "出动前保障（地面阶段）",
+      "NOS": "2",
+      "MNOS": "2",
+      "DURN": ".5"
+    },
+    {
+      "MTID": "FLIGHT",
+      "DESCR": "双机编队飞行",
+      "NOS": "2",
+      "MNOS": "2",
+      "DURN": "2"
+    }
+  ],
+  "MissionSystem": [
+    {
+      "MTID": "PREFLIGHT",
+      "SID": "AIRCRAFT"
+    },
+    {
+      "MTID": "FLIGHT",
+      "SID": "AIRCRAFT"
+    }
+  ],
+  "Operations": [
+    {
+      "USTID": "F01",
+      "PRID": "THREE_DAYS"
+    }
+  ],
+  "OperationProfile": [
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "8.5"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "9"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "11"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "12"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "14"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "15"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "32.5"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "33"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "35"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "36"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "38"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "39"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "56.5"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "57"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "59"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "60"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "PREFLIGHT",
+      "STIM": "62"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "63"
+    }
+  ],
+  "SimLabDutyRule": [
+    {
+      "MTID": "PREFLIGHT",
+      "MIN_QTY": "2",
+      "PRIORITY": "1",
+      "RELIEF_H": "0",
+      "TOLERANCE_H": "0"
+    },
+    {
+      "MTID": "FLIGHT",
+      "MIN_QTY": "2",
+      "PRIORITY": "1",
+      "RELIEF_H": "0",
+      "TOLERANCE_H": "0"
+    }
+  ],
+  "Control": [
+    {
+      "NREPS": "1000",
+      "SIMPE": "72",
+      "RSEED": "20260908",
+      "APID": "AIRCASE",
+      "RCINT": "0.08333333333333333",
+      "ENPM": "N",
+      "ENLAT": "N",
+      "ENALU": "N",
+      "RELOP": "SERIAL",
+      "ENLOG": "Y"
+    }
+  ]
+}

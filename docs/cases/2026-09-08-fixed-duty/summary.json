@@ -1,0 +1,354 @@
+[
+  {
+    "code": "A",
+    "name": "现状",
+    "model_hash": "b348d0744ec3b87b9e66f854cfed55e2e993e70c85561a17dea951cfc9883fe8",
+    "seed": 20260908,
+    "availability": 0.9474821810952838,
+    "metrics": {
+      "fulfillment": {
+        "mean": 0.971737063507589,
+        "low": 0.9647581864129584,
+        "high": 0.9787159406022197
+      },
+      "minimum_rate": {
+        "mean": 0.9400801218127333,
+        "low": 0.9211694997090351,
+        "high": 0.9589907439164315
+      },
+      "qualified_rate": {
+        "mean": 0.908333333333333,
+        "low": 0.8820215929654861,
+        "high": 0.9346450737011799
+      }
+    },
+    "gap_hours": 115.31278088903652,
+    "gap_reasons": {
+      "fleet_shortage": 0.0,
+      "busy": 44.16023520275094,
+      "relief": 19.477546856320384,
+      "waiting_spare": 45.599524836861164,
+      "waiting_resource": 0.04744293901583505,
+      "replacement": 6.028031054088185
+    },
+    "groups": {
+      "DUTY": {
+        "fulfillment": 0.9846758992249517,
+        "minimum_rate": 0.977067094896514,
+        "qualified_rate": 0.9616666666666666,
+        "gap_hours": 55.16676279017364
+      },
+      "PEAK": {
+        "fulfillment": 0.8746957956273692,
+        "minimum_rate": 0.8661061756451719,
+        "qualified_rate": 0.855,
+        "gap_hours": 60.14601809886287
+      }
+    },
+    "resources": {
+      "BASE/TECH": 0.03541666666666667,
+      "DEPOT/TECH": 0.6150404255142762,
+      "DEPOT/BAY": 0.5870126477364983
+    },
+    "maintenance": {
+      "LRU": {
+        "started": 39.15,
+        "completed": 33.4,
+        "tat_sum": 2652.0480744165084,
+        "in_progress": 5.75,
+        "mean_tat": 79.4026369585781,
+        "phase_hours": {
+          "transport": 467.68605922167916,
+          "wait_resource": 1819.252738947467,
+          "diagnosis": 21.48,
+          "remove": 21.01,
+          "wait_sru": 272.142456085877,
+          "install": 19.35,
+          "test": 18.74,
+          "repair": 481.07553698043824
+        }
+      },
+      "SRU": {
+        "started": 21.01,
+        "completed": 19.44,
+        "tat_sum": 565.6649124042883,
+        "in_progress": 1.57,
+        "mean_tat": 29.097989321208242,
+        "phase_hours": {
+          "transport": 0.0,
+          "wait_resource": 294.4779373445249,
+          "diagnosis": 0.0,
+          "remove": 0.0,
+          "wait_sru": 0.0,
+          "install": 0.0,
+          "test": 0.0,
+          "repair": 324.00267576011936
+        }
+      }
+    }
+  },
+  {
+    "code": "B",
+    "name": "补位准备30→15分钟",
+    "model_hash": "57a246dffb8e4dc61c7e2825926854620804934d59ddc9a3fea0706bd07d6adf",
+    "seed": 20260908,
+    "availability": 0.9466999921222581,
+    "metrics": {
+      "fulfillment": {
+        "mean": 0.9732504335585109,
+        "low": 0.9658149184936428,
+        "high": 0.9806859486233791
+      },
+      "minimum_rate": {
+        "mean": 0.9387532445401311,
+        "low": 0.918802034760028,
+        "high": 0.9587044543202342
+      },
+      "qualified_rate": {
+        "mean": 0.9093333333333331,
+        "low": 0.8823917221409211,
+        "high": 0.9362749445257451
+      }
+    },
+    "gap_hours": 109.13823108127534,
+    "gap_reasons": {
+      "fleet_shortage": 0.0,
+      "busy": 44.134002072392384,
+      "relief": 9.83162121335652,
+      "waiting_spare": 48.87298709347917,
+      "waiting_resource": 0.10041668071281068,
+      "replacement": 6.199204021334508
+    },
+    "groups": {
+      "DUTY": {
+        "fulfillment": 0.9860040029414149,
+        "minimum_rate": 0.9744522463383772,
+        "qualified_rate": 0.9606666666666667,
+        "gap_hours": 50.385589410906746
+      },
+      "PEAK": {
+        "fulfillment": 0.877598663186732,
+        "minimum_rate": 0.8673552409436392,
+        "qualified_rate": 0.8579999999999999,
+        "gap_hours": 58.752641670368675
+      }
+    },
+    "resources": {
+      "BASE/TECH": 0.035430555555555555,
+      "DEPOT/TECH": 0.6145273544539576,
+      "DEPOT/BAY": 0.5865342988984021
+    },
+    "maintenance": {
+      "LRU": {
+        "started": 39.23,
+        "completed": 33.32,
+        "tat_sum": 2646.215366470933,
+        "in_progress": 5.91,
+        "mean_tat": 79.41822828544217,
+        "phase_hours": {
+          "transport": 468.6034176953561,
+          "wait_resource": 1833.4502955654034,
+          "diagnosis": 21.54,
+          "remove": 21.01,
+          "wait_sru": 274.669402706163,
+          "install": 19.3,
+          "test": 18.64,
+          "repair": 481.19086635316717
+        }
+      },
+      "SRU": {
+        "started": 21.01,
+        "completed": 19.44,
+        "tat_sum": 566.8531249138603,
+        "in_progress": 1.57,
+        "mean_tat": 29.159111363881703,
+        "phase_hours": {
+          "transport": 0.0,
+          "wait_resource": 296.94040206265817,
+          "diagnosis": 0.0,
+          "remove": 0.0,
+          "wait_sru": 0.0,
+          "install": 0.0,
+          "test": 0.0,
+          "repair": 323.23852406053174
+        }
+      }
+    }
+  },
+  {
+    "code": "C",
+    "name": "维修站人员与工位各2→4",
+    "model_hash": "041fbaef7698ee6407c81bd5017fa4c62720d59fd8b4c34ed537abbfe77808e3",
+    "seed": 20260908,
+    "availability": 0.989939713225724,
+    "metrics": {
+      "fulfillment": {
+        "mean": 0.9930154085450846,
+        "low": 0.9925793757928372,
+        "high": 0.9934514412973321
+      },
+      "minimum_rate": {
+        "mean": 0.9985501499771031,
+        "low": 0.9976766993140654,
+        "high": 0.9994236006401408
+      },
+      "qualified_rate": {
+        "mean": 0.9941666666666665,
+        "low": 0.9917527017182093,
+        "high": 0.9965806316151238
+      }
+    },
+    "gap_hours": 28.49713313605424,
+    "gap_reasons": {
+      "fleet_shortage": 0.0,
+      "busy": 3.4024891046455923,
+      "relief": 19.868914599158856,
+      "waiting_spare": 0.6269773239289134,
+      "waiting_resource": 0.02218727705323845,
+      "replacement": 4.576564831267588
+    },
+    "groups": {
+      "DUTY": {
+        "fulfillment": 0.993738362750795,
+        "minimum_rate": 0.9997604481490753,
+        "qualified_rate": 0.9976666666666667,
+        "gap_hours": 22.541894097137675
+      },
+      "PEAK": {
+        "fulfillment": 0.9875932520022573,
+        "minimum_rate": 0.9961295536331592,
+        "qualified_rate": 0.9906666666666665,
+        "gap_hours": 5.955239038916515
+      }
+    },
+    "resources": {
+      "BASE/TECH": 0.03710648148148148,
+      "DEPOT/TECH": 0.33246401578480145,
+      "DEPOT/BAY": 0.3167035991181348
+    },
+    "maintenance": {
+      "LRU": {
+        "started": 40.15,
+        "completed": 37.69,
+        "tat_sum": 1512.5274403875824,
+        "in_progress": 2.46,
+        "mean_tat": 40.13073601452859,
+        "phase_hours": {
+          "transport": 479.6757287410444,
+          "wait_resource": 386.6816870181563,
+          "diagnosis": 22.88,
+          "remove": 22.88,
+          "wait_sru": 117.35345855682868,
+          "install": 22.51,
+          "test": 22.48,
+          "repair": 502.8571641796591
+        }
+      },
+      "SRU": {
+        "started": 22.88,
+        "completed": 22.0,
+        "tat_sum": 368.2133706606702,
+        "in_progress": 0.88,
+        "mean_tat": 16.736971393666828,
+        "phase_hours": {
+          "transport": 0.0,
+          "wait_resource": 16.67071834230921,
+          "diagnosis": 0.0,
+          "remove": 0.0,
+          "wait_sru": 0.0,
+          "install": 0.0,
+          "test": 0.0,
+          "repair": 363.889201280569
+        }
+      }
+    }
+  },
+  {
+    "code": "D",
+    "name": "补位提速＋维修站扩容",
+    "model_hash": "54d3150d2a877fcbd0004337f84d1980529b6a4bb9e3922a55b928a787e9f8b2",
+    "seed": 20260908,
+    "availability": 0.9897571829676312,
+    "metrics": {
+      "fulfillment": {
+        "mean": 0.9954920443188157,
+        "low": 0.995170525628,
+        "high": 0.9958135630096313
+      },
+      "minimum_rate": {
+        "mean": 0.9989304596899857,
+        "low": 0.9982635088255619,
+        "high": 0.9995974105544095
+      },
+      "qualified_rate": {
+        "mean": 0.9956666666666668,
+        "low": 0.9936936185450509,
+        "high": 0.9976397147882827
+      }
+    },
+    "gap_hours": 18.39245917923238,
+    "gap_reasons": {
+      "fleet_shortage": 0.0,
+      "busy": 3.193746385272884,
+      "relief": 10.089572186876403,
+      "waiting_spare": 0.4643724599170931,
+      "waiting_resource": 0.04079909120945759,
+      "replacement": 4.603969055956583
+    },
+    "groups": {
+      "DUTY": {
+        "fulfillment": 0.9961197959983742,
+        "minimum_rate": 0.9998359892822245,
+        "qualified_rate": 0.9986666666666666,
+        "gap_hours": 13.968734405852711
+      },
+      "PEAK": {
+        "fulfillment": 0.9907839067221257,
+        "minimum_rate": 0.9971194005055083,
+        "qualified_rate": 0.9926666666666666,
+        "gap_hours": 4.4237247733797105
+      }
+    },
+    "resources": {
+      "BASE/TECH": 0.03718055555555556,
+      "DEPOT/TECH": 0.33267351573848375,
+      "DEPOT/BAY": 0.31686101573848374
+    },
+    "maintenance": {
+      "LRU": {
+        "started": 40.25,
+        "completed": 37.7,
+        "tat_sum": 1518.0655057409683,
+        "in_progress": 2.55,
+        "mean_tat": 40.26698954220075,
+        "phase_hours": {
+          "transport": 480.916753489719,
+          "wait_resource": 389.869361988611,
+          "diagnosis": 22.96,
+          "remove": 22.96,
+          "wait_sru": 119.39194899039445,
+          "install": 22.58,
+          "test": 22.53,
+          "repair": 502.2117734051094
+        }
+      },
+      "SRU": {
+        "started": 22.96,
+        "completed": 22.04,
+        "tat_sum": 369.31775280758353,
+        "in_progress": 0.92,
+        "mean_tat": 16.756703847893988,
+        "phase_hours": {
+          "transport": 0.0,
+          "wait_resource": 17.805100489222646,
+          "diagnosis": 0.0,
+          "remove": 0.0,
+          "wait_sru": 0.0,
+          "install": 0.0,
+          "test": 0.0,
+          "repair": 364.85795192172355
+        }
+      }
+    }
+  }
+]
