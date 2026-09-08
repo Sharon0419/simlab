@@ -163,6 +163,80 @@ def run(directory):
     output['checks'] += ['layered example', 'structure tree', 'depot extension edit', 'layered worker', 'maintenance CSV', 'layered package roundtrip']
     output['layered_availability'] = layered_run['result']['availability']
     output['layered_lru_tat'] = m['by_kind']['LRU']['mean_tat']
+    window.nav.setCurrentRow(6)
+    planner = window.duty_planner
+    QTest.mouseClick(planner.example_button, Qt.LeftButton)
+    assert window.project['tables']['SimLabDutyRule'][0]['MIN_QTY'] == '13'
+    planner.minimum.setValue(14)
+    planner.relief.setValue(.75)
+    QTest.mouseClick(planner.save_button, Qt.LeftButton)
+    assert window.project['tables']['SimLabDutyRule'][0]['MIN_QTY'] == '14'
+    assert window.save()
+    assert load_project(window.project_path)['tables']['SimLabDutyRule'][0]['RELIEF_H'] == '0.75'
+    planner.name.setText('重点值守')
+    planner.days.setValue(2)
+    planner.start_hour.setValue(10)
+    planner.end_hour.setValue(12)
+    planner.target.setValue(2)
+    planner.minimum.setValue(1)
+    planner.priority.setValue(1)
+    before_count = len(window.project['tables']['OperationProfile'])
+    QTest.mouseClick(planner.preview_button, Qt.LeftButton)
+    assert planner.apply_button.isEnabled(), planner.message.text()
+    assert planner.grid.rowCount() == 2
+    assert len(window.project['tables']['OperationProfile']) == before_count
+    assert '2 对重叠' in planner.message.text()
+    planner.days.setValue(3)
+    assert not planner.apply_button.isEnabled()
+    planner.days.setValue(2)
+    QTest.mouseClick(planner.preview_button, Qt.LeftButton)
+    QTest.mouseClick(planner.apply_button, Qt.LeftButton)
+    assert len(window.project['tables']['OperationProfile']) == before_count + 2
+    assert planner.grid.rowCount() == 32
+    assert window.save()
+    QTest.qWait(100)
+    window.grab().save(str(directory/'09-duty-plan.png'))
+    window.nav.setCurrentRow(2)
+    window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button, Qt.LeftButton)
+    assert not planner.isEnabled()
+    deadline = time.monotonic()+60
+    while window.process is not None and time.monotonic() < deadline:
+        QTest.qWait(50)
+    if window.process is not None:
+        window.process.kill()
+        window.process.waitForFinished(3000)
+        raise AssertionError('Duty worker timed out')
+    assert not failures, failures
+    duty_run = window.project['runs'][-1]
+    assert duty_run['status'] == 'completed', duty_run
+    duty = duty_run['result']['mission']
+    assert 0 < duty['minimum_rate'] < 1
+    assert 0 <= duty['qualified_rate'] <= 1
+    assert duty['gap_reasons']['relief'] > 0
+    assert window.duty_table.rowCount() == 32
+    assert window.duty_intervals.rowCount() > 0
+    assert planner.isEnabled()
+    window.chart_tabs.setCurrentIndex(1)
+    window.result_tabs.setCurrentIndex(9)
+    QTest.qWait(100)
+    window.grab().save(str(directory/'10-duty-results.png'))
+    window.result_tabs.setCurrentIndex(10)
+    QTest.qWait(100)
+    window.grab().save(str(directory/'11-duty-intervals.png'))
+    window.export_missions_path(directory/'duty.csv')
+    assert 'qualified_rate' in (directory/'duty.csv').read_text(encoding='utf-8-sig').splitlines()[0]
+    assert load_project(window.project_path)['runs'][-1]['result']['mission'] == duty
+    export_package(window.project, directory/'duty-complete.simproj')
+    imported_duty = import_package(directory/'duty-complete.simproj')
+    assert imported_duty['runs'][-1]['result']['mission'] == duty
+    window.adopt_project(imported_duty, directory/'duty-imported.sqlite')
+    assert window.duty_table.rowCount() == 32
+    output['checks'] += ['duty example', 'duty rule persistence', 'daily plan preview and conflict',
+                         'preview invalidation', 'duty worker and metrics', 'duty CSV', 'duty exchange roundtrip']
+    output['duty_minimum_rate'] = duty['minimum_rate']
+    output['duty_qualified_rate'] = duty['qualified_rate']
+    output['duty_relief_gap_hours'] = duty['gap_reasons']['relief']
     window.close()
     app.processEvents()
     (directory/'smoke-result.json').write_text(json.dumps(output, indent=2), encoding='utf-8')

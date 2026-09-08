@@ -1,3 +1,4 @@
+param([string]$OutputDirectory = 'dist')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -7,7 +8,11 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
 }
 $releaseVersion = & $pythonExe -c 'from simlab import __version__; print(__version__)'
 if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version.' }
-$releaseRoot = Join-Path $projectRoot 'dist'
+$distRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'dist'))
+$releaseRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirectory))
+if ($releaseRoot -ne $distRoot -and -not $releaseRoot.StartsWith($distRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Build output must remain inside the project dist directory.'
+}
 $bundleFolder = Join-Path $releaseRoot 'SimLab'
 $targetExe = Join-Path $bundleFolder 'SimLab.exe'
 $running = Get-Process SimLab -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $targetExe }

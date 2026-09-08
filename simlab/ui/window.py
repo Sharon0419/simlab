@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxL
     QTableWidget, QTableWidgetItem, QHeaderView, QTextBrowser, QTabWidget, QAbstractItemView)
 from ..schema import TABLES, SCHEMA, value
 from ..project import new_project, save_project, load_project, export_package, import_package, now, model_hash
-from ..sample import demo_project, mission_project, layered_project
+from ..sample import demo_project, mission_project, layered_project, duty_project
 from .. import __version__
 from ..missions import GAP_LABELS
 from ..maintenance import PHASES
@@ -22,6 +22,7 @@ from ..validation import validate
 from ..compiler import compile_model, ModelError
 from .modeling import ModelEditor
 from .structure import StructureView
+from .duty import DutyPlanner
 from .widgets import STYLE, label, button, card, Metric, AvailabilityChart, MissionChart
 
 def readonly_table(headers):
@@ -108,6 +109,7 @@ class MainWindow(QMainWindow):
         self.nav.setObjectName('Navigation')
         self.nav.addItems(['01   项目概览', '02   模型数据', '03   仿真实验', '04   结果分析', '05   建模说明'])
         self.nav.addItem('06   组成结构')
+        self.nav.addItem('07   值守计划')
         self.nav.currentRowChanged.connect(self.navigate)
         sl.addWidget(self.nav, 1)
         bottom = label(f'●  本机运行 · 数据本地保存\n\nSIMLOX 2017 字段基线\nv{__version__}  /  独立开发', 'SidebarSub')
@@ -142,6 +144,10 @@ class MainWindow(QMainWindow):
         self.build_help()
         self.structure = StructureView()
         self.pages.addWidget(self.structure)
+        self.duty_planner = DutyPlanner()
+        self.duty_planner.changed.connect(self.duty_changed)
+        self.duty_planner.example_requested.connect(self.new_duty_demo)
+        self.pages.addWidget(self.duty_planner)
         rl.addWidget(self.pages, 1)
         root.addWidget(right, 1)
         self.nav.setCurrentRow(0)
@@ -260,7 +266,7 @@ class MainWindow(QMainWindow):
         <p>支持两级保障网络、部件拆装、修复返库、运输延迟及组合资源排队。</p>
         <p>全量建模表均可保存交换；高级规则尚未接入的，会在运行前指出并拦截。</p>
         <p><b>结果口径：</b>可用度按状态持续时间精确积分；曲线为各重复试验的采样均值。</p>
-        <p>填写 Operations 后启用固定任务需求窗口：UTIL=1，待命不累计运行故障；按开始时间分配，不抢占，故障后空闲设备即时补位。</p>
+        <p>填写 Operations 后启用固定值守窗口：UTIL=1，待命和补位准备不累计运行故障；按优先级分配空闲设备，不抢占。SimLabDutyRule 可配置最低保障、补位时间和连续不达标容忍时间。</p>
         <p>资源班次按 ShiftProfile 显式时间窗执行：班内开始，允许跨班完成。任务满足率是设备小时供给比例，不等同原厂任务成功率。</p>
         <p>从项目概览“新建任务日历示例”开始；不支持原厂二进制 .sxi 文件直接导入。</p>''')
         nl.addWidget(text, 1)
@@ -325,10 +331,13 @@ class MainWindow(QMainWindow):
         self.maintenance_table = readonly_table(['层级', '平均送修数', '平均完成数', '平均未完成数', '已完成平均周转 / 小时'])
         self.phase_table = readonly_table(['层级', '维修工序', '平均总耗时 / 小时'])
         self.component_table = readonly_table(['实物编号', '部件类型', '父实物', '自身状态', '所在流程', '站点', '健康状态'])
+        self.duty_table = readonly_table(['窗口', '目标 / 最低', '达标时间比例', '窗口合格率', '平均不达标 / 小时', '最长连续均值 / 小时'])
+        self.duty_intervals = readonly_table(['首轮不达标窗口', '开始 / 小时', '结束 / 小时', '实际 / 最低', '缺口原因分摊（设备数）'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
                               ('首轮事件', self.events_table), ('实验对比', self.compare_table),
                               ('任务窗口', self.mission_table), ('任务缺口', self.gap_table),
-                              ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table)]:
+                              ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table),
+                              ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals)]:
             tabs.addTab(widget, title)
         self.result_tabs = tabs
         layout.addWidget(tabs, 2)
@@ -363,7 +372,8 @@ class MainWindow(QMainWindow):
         <p>串联关键部件故障使设备停机，停机期间不累计运行故障。层级模式保留健康叶子的剩余故障预算，修复叶子下次运行再抽样。暂不支持冗余、老化、预防性维修和供应中断。</p>
         <h3>0.2 任务与班次</h3>
         <p>Operations → OperationProfile → MissionType / MissionSystem 定义固定需求窗口，STIM 为从仿真开始算起的小时，DURN 为持续小时。每行启动一个窗口；不支持递归、随机或延后启动。NOS=MNOS；只绑定一种系统。</p>
-        <p>任务模式要求 UTIL=1。仅被分配的设备累计运行故障，待命不累计。按开始时间和任务标识先到先服务，不抢占已有分配；故障设备退出，空闲设备即时补位，需求窗口按原定时间结束。</p>
+        <p>任务模式要求 UTIL=1。仅实际值守设备累计运行故障，待命和补位准备不累计。无扩展规则时先到先服务、即时补位；v0.4 可在“值守计划”配置优先级、最低数量和补位准备小时，不抢占已有分配，窗口按原定时间结束。</p>
+        <p>最低保障达标率按任务窗口小时加权；最长连续不达标时间不超过容忍时间即窗口合格。不达标期间仍继续补位，不取消任务。SimLabDutyRule 为独立扩展，原厂 MNOS/MNOSA 仍按原受限契约填写。首轮不达标区间最多5000条，总指标覆盖所有事件；各窗口最长连续值显示跨重复试验的均值。</p>
         <p>任务满足率=供给设备小时/需求设备小时；全程无缺口比例独立计算。两者不宣称与原厂任务成功判定一致。统计精确积分，曲线是采样显示，可能漏掉短时缺口。</p>
         <p>ShiftProfile 直接引用 Shift，STIM/ETIM 为绝对小时；ResourceStationData.SHPID 绑定资源。班内才能开始拆装或修复，已开始允许跨班完成；未绑定资源为全天可用。资源占用率仍以整个日历时间为分母。</p>
         <p>拆装总时间按 Control.RMVFR 分成拆卸和安装两段，各段原子申请全部资源。拆下部件送上级修理中心；每次备件请求向上级发出一件补充请求，修复件回到上级库。无上级时在本站修复返库。</p>
@@ -385,6 +395,8 @@ class MainWindow(QMainWindow):
             return
         self.pages.setCurrentIndex(index)
         if self.project:
+            if index == 6:
+                self.duty_planner.set_project(self.project)
             if index == 5:
                 self.structure.set_project(self.project)
             if index == 2:
@@ -424,6 +436,7 @@ class MainWindow(QMainWindow):
             self.settings.setValue('last_project', str(path))
         self.editor.set_project(project)
         self.structure.set_project(project)
+        self.duty_planner.set_project(project)
         self.sync_controls()
         self.refresh_overview()
         self.refresh_results()
@@ -461,6 +474,20 @@ class MainWindow(QMainWindow):
             self.nav.setCurrentRow(5)
         except Exception as error:
             self.warn('创建多层维修示例失败', str(error))
+
+    def new_duty_demo(self):
+        if self.process is not None or (self.dirty and not self.save()):
+            return
+        project = duty_project()
+        try:
+            self.adopt_project(project, self.data_dir/'projects'/f'duty-{project["id"][:12]}.sqlite')
+            self.nav.setCurrentRow(6)
+        except Exception as error:
+            self.warn('创建值守示例失败', str(error))
+
+    def duty_changed(self):
+        self.editor.set_project(self.project)
+        self.model_changed()
 
     def refresh_overview(self):
         if not self.project:
@@ -621,6 +648,7 @@ class MainWindow(QMainWindow):
             return False
     def set_busy(self, busy):
         self.editor.setEnabled(not busy)
+        self.duty_planner.setEnabled(not busy)
         for widget in self.experiment_controls + self.project_buttons + [self.run_name]:
             widget.setEnabled(not busy)
         self.run_button.setEnabled(not busy)
@@ -741,7 +769,7 @@ class MainWindow(QMainWindow):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
         self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
         self.maintenance_export_button.setEnabled(bool(run and run['result'].get('maintenance')))
-        for table in (self.maintenance_table, self.phase_table, self.component_table):
+        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals):
             table.setRowCount(0)
         if not run:
             for metric in self.result_cards:
@@ -777,6 +805,13 @@ class MainWindow(QMainWindow):
             ci = mission['ci95']
             interval = f'{ci[0]:.1%}–{ci[1]:.1%}' if ci else '单次试验'
             self.mission_summary.setText(f'设备小时满足率 {mission["fulfillment"]:.2%} · 均值95%区间 {interval} · 全程无缺口窗口 {mission["full_window_rate"]:.1%}\n平均缺口 {mission["gap_hours"]:.2f} 设备小时；曲线按采样间隔显示，指标按事件积分。')
+            if 'minimum_rate' in mission:
+                detail_note = '（已截断）' if mission.get('intervals_truncated') else ''
+                self.mission_summary.setText(self.mission_summary.text() + f'\n最低保障达标率 {mission["minimum_rate"]:.2%} · 值守窗口合格率 {mission["qualified_rate"]:.2%}；不达标时段为首轮、最多5000条{detail_note}。合计曲线不能代替各任务判定。')
+                fill_table(self.duty_table, [[t['id'], f'{t["quantity"]} / {t["minimum"]}', f'{t["minimum_rate"]:.2%}',
+                    f'{t["qualified_rate"]:.2%}', f'{t["below_hours"]:.3f}', f'{t["longest_below_hours"]:.3f}'] for t in mission['tasks']])
+                fill_table(self.duty_intervals, [[t['task'], f'{t["start"]:.3f}', f'{t["end"]:.3f}',
+                    f'{t["supplied"]} / {t["minimum"]}', '；'.join(f'{GAP_LABELS[k]}: {v}' for k, v in t['reasons'].items())] for t in mission.get('intervals', [])])
             fill_table(self.mission_table, [[t['id'], f'{t["start"]:g}', f'{t["end"]:g}', t['quantity'], f'{t["supplied_hours"]:.2f}', f'{t["gap_hours"]:.2f}', f'{t["full_window_rate"]:.1%}'] for t in mission['tasks']])
             fill_table(self.gap_table, [[GAP_LABELS[key], f'{v:.2f}'] for key, v in mission['gap_reasons'].items()])
         else:
@@ -831,6 +866,8 @@ class MainWindow(QMainWindow):
         if not run or not run['result'].get('mission'):
             raise ValueError('本实验没有任务结果。')
         columns = ['id', 'start', 'end', 'quantity', 'demand_hours', 'supplied_hours', 'gap_hours', 'full_window_rate']
+        if 'minimum_rate' in run['result']['mission']:
+            columns += ['minimum', 'priority', 'relief_hours', 'tolerance_hours', 'minimum_rate', 'qualified_rate', 'below_hours', 'longest_below_hours']
         with open(path, 'w', encoding='utf-8-sig', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['run_id', 'model_hash', 'seed'] + columns)

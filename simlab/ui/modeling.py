@@ -189,8 +189,8 @@ class ModelEditor(QWidget):
         def line(title, content):
             return f'<p style="color:#9fb4d1;margin-bottom:3px">{title}</p><p style="margin-top:0;color:#dce8fa">{esc(str(content or "—"))}</p>'
         text = f'<h3 style="color:#8fc5ff">{esc(field["id"])}</h3><b>{esc(field_label(field))}</b>'
-        if self.current_table == 'SimLabDepotProcess':
-            text += '<p>SimLab 独立扩展表 v1；不是 SIMLOX 原厂字段。</p>'
+        if self.current_table.startswith('SimLab'):
+            text += '<p>SimLab 独立扩展；不是 SIMLOX 原厂字段。</p>'
         text += line('原始定义', field['description'])
         text += line('数据类型 / 字段类型', field['type']+' / '+field['kind'])
         text += line('基本单位', field['unit'])

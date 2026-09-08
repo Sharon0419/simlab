@@ -6,6 +6,7 @@ from .extensions import TABLES as EXTENSION_TABLES
 SCHEMA = json.loads((Path(__file__).parent / 'data' / 'schema.json').read_text(encoding='utf-8'))
 TABLES = {**SCHEMA['tables'], **EXTENSION_TABLES}
 TABLE_LABELS = {
+    'SimLabDutyRule': '固定值守规则（SimLab 扩展）',
     'SimLabDepotProcess': '检测与测试（SimLab 扩展）',
     'System': '系统定义', 'Item': '备件 / 部件', 'MaterielStructure': '装备组成',
     'MaterielPosition': '安装位置', 'SystemStructure': '系统组成', 'ItemStructure': '部件组成',

@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 1
+VERSION = 2
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):
@@ -16,3 +16,11 @@ TABLES = {'SimLabDepotProcess': [
     field('TEST_H', 'Mandatory', '修后测试时间 / 小时', 'Floating point', unit='Hours'),
     field('TEST_TASK', 'Regular', '测试任务与资源', references='Tasks TID'),
 ]}
+
+TABLES['SimLabDutyRule'] = [
+    field('MTID', 'Index', '值守任务类型（SimLab 扩展）', references='MissionType MTID'),
+    field('MIN_QTY', 'Mandatory', '最低保障数量', 'Integer'),
+    field('PRIORITY', 'Regular', '分配优先级（越小越优先，不抢占）', 'Integer', '1'),
+    field('RELIEF_H', 'Regular', '窗口开始后补位准备时间', 'Floating point', '0', unit='Hours'),
+    field('TOLERANCE_H', 'Regular', '允许连续不达标时间', 'Floating point', '0', unit='Hours'),
+]

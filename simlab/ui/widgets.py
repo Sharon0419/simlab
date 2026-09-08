@@ -163,7 +163,10 @@ class MissionChart(QWidget):
             painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
             painter.setPen(QColor('#a4bbd8'))
             painter.drawText(QRectF(0, y-10, 45, 20), Qt.AlignRight | Qt.AlignVCenter, f'{maximum*i/4:g}')
-        for key, color, caption, offset in [('demand', '#f3c77a', '需求设备', 55), ('supplied', '#60a5fa', '实际供给', 165)]:
+        lines = [('demand', '#f3c77a', '目标设备', 55), ('supplied', '#60a5fa', '实际供给', 165)]
+        if 'minimum' in self.samples[0]:
+            lines.append(('minimum', '#67dfbd', '最低保障', 275))
+        for key, color, caption, offset in lines:
             painter.setPen(QColor(color))
             painter.drawText(QRectF(offset, 0, 110, 25), Qt.AlignLeft, caption)
             points = [QPointF(area.left()+s['time']/horizon*area.width(), area.bottom()-s.get(key, 0)/maximum*area.height()) for s in self.samples]

@@ -84,3 +84,11 @@ def layered_project():
     t['SimLabDepotProcess'] = [{'LRU': 'POWER', 'STATION': 'DEPOT', 'DIAG_H': '1', 'DIAG_TASK': 'INSPECT',
                                'TEST_H': '1', 'TEST_TASK': 'INSPECT'}]
     return project
+
+
+def duty_project():
+    project = layered_project()
+    project['name'] = '示例 · 固定时段值守与故障补位'
+    t = project['tables']
+    t['SimLabDutyRule'] = [dict(MTID='DUTY', MIN_QTY='13', PRIORITY='2', RELIEF_H='.5', TOLERANCE_H='.25')]
+    return project

@@ -269,6 +269,8 @@ def simulate(tables, progress=None):
     for rep in range(config['replications']):
         callback = (lambda fraction, r=rep: progress((r+fraction)/config['replications'])) if progress else None
         one = run_one(config, rep, callback)
+        if rep and one['mission'] is not None:
+            one['mission']['intervals'] = []
         if rep and one['maintenance'] is not None:
             one['maintenance']['jobs'] = []
             one['components']['instances'] = []
@@ -281,20 +283,23 @@ def simulate(tables, progress=None):
     mission = None
     if config['missions']:
         for i, sample in enumerate(samples):
-            for key in ('demand', 'supplied'):
+            for key in ('demand', 'supplied', 'minimum'):
                 sample[key] = float(np.mean([r['samples'][i][key] for r in results]))
         mission = {key: float(np.mean([r['mission'][key] for r in results]))
-                   for key in ('demand_hours', 'supplied_hours', 'gap_hours', 'fulfillment', 'full_window_rate')}
+                   for key in ('demand_hours', 'supplied_hours', 'gap_hours', 'fulfillment', 'full_window_rate', 'minimum_rate', 'qualified_rate', 'below_hours')}
+        mission['intervals'] = results[0]['mission']['intervals']
+        mission['intervals_truncated'] = results[0]['mission']['intervals_truncated']
         values = np.array([r['mission']['fulfillment'] for r in results])
         margin = t95(len(results)) * float(values.std(ddof=1)) / math.sqrt(len(results)) if len(results) > 1 else None
         mission['ci95'] = [max(0, mission['fulfillment']-margin), min(1, mission['fulfillment']+margin)] if margin is not None else None
         mission['gap_reasons'] = {key: float(np.mean([r['mission']['gap_reasons'][key] for r in results])) for key in GAP_LABELS}
         mission['tasks'] = []
         for i, first in enumerate(results[0]['mission']['tasks']):
-            task = {key: first[key] for key in ('id', 'type', 'location', 'sid', 'quantity', 'start', 'end', 'demand_hours')}
-            for key in ('supplied_hours', 'gap_hours'):
+            task = {key: first[key] for key in ('id', 'type', 'location', 'sid', 'quantity', 'start', 'end', 'demand_hours', 'minimum', 'priority', 'relief_hours', 'tolerance_hours')}
+            for key in ('supplied_hours', 'gap_hours', 'below_hours', 'longest_below_hours', 'minimum_rate'):
                 task[key] = float(np.mean([r['mission']['tasks'][i][key] for r in results]))
             task['full_window_rate'] = float(np.mean([r['mission']['tasks'][i]['gap_hours'] < 1e-9 for r in results]))
+            task['qualified_rate'] = float(np.mean([r['mission']['tasks'][i]['qualified'] for r in results]))
             mission['tasks'].append(task)
     if progress:
         progress(1.0)
@@ -313,4 +318,4 @@ def simulate(tables, progress=None):
             'events': results[0]['events'], 'events_truncated': results[0]['events_truncated'],
             'replication_results': [{k: v for k, v in r.items() if k not in ('samples', 'events', 'components', 'maintenance')} for r in results],
             'assumptions': ('System/LRU/SRU 串联；基地换LRU、站内维修SRU；叶子指数故障；' if config.get('children') else '一层串联 LRU；指数故障；') + '两级维修闭环；资源组合原子申请；班内启动、跨班继续。' +
-                ('固定需求窗口；先到先服务、不抢占；故障退出、即时补位；待命不累计运行故障。' if mission else '连续使用率；无任务调度。')}
+                ('固定值守窗口；优先级分配、不抢占；故障退出、按规则准备补位；待命和准备不累计运行故障；最低保障按事件积分。' if mission else '连续使用率；无任务调度。')}

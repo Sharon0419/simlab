@@ -7,6 +7,7 @@ from .schema import value
 
 
 SUPPORTED_OPERATIONS = {
+    'SimLabDutyRule': {'MTID', 'MIN_QTY', 'PRIORITY', 'RELIEF_H', 'TOLERANCE_H'},
     'MissionType': {'MTID', 'NOS', 'MNOS', 'MNOSA', 'DURN'},
     'MissionSystem': {'MTID', 'SID', 'NOS', 'MNOS', 'MNOSA'},
     'Operations': {'USTID', 'PRID'},
@@ -40,6 +41,16 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
     for row in tables.get('OperationProfile', []):
         profiles.setdefault(row['PRID'], []).append(row)
     types = {r['MTID']: r for r in tables.get('MissionType', [])}
+    duty = {}
+    for row in tables.get('SimLabDutyRule', []):
+        tid = row['MTID']
+        minimum = int(float(val('SimLabDutyRule', row, 'MIN_QTY')))
+        priority = int(float(val('SimLabDutyRule', row, 'PRIORITY')))
+        if not 1 <= minimum <= int(val('MissionType', types[tid], 'NOS')) or priority < 1:
+            errors.append(f'SimLabDutyRule.{tid}: 最低数量须为1至目标数量，优先级须为正整数。')
+        duty[tid] = {'minimum': minimum, 'priority': priority,
+                     'relief_hours': float(val('SimLabDutyRule', row, 'RELIEF_H')),
+                     'tolerance_hours': float(val('SimLabDutyRule', row, 'TOLERANCE_H'))}
     systems = {}
     for row in tables.get('MissionSystem', []):
         systems.setdefault(row['MTID'], []).append(row)
@@ -79,7 +90,8 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
                 errors.append(f'Operations.{location}: 没有部署任务所需系统 {sid}。')
             missions.append({'id': f'{location}/{profile}/{tid}/{index+1}', 'type': tid,
                              'location': location, 'sid': sid, 'quantity': quantity,
-                             'start': start, 'end': end})
+                             'start': start, 'end': end,
+                             **duty.get(tid, {'minimum': quantity, 'priority': 1, 'relief_hours': 0.0, 'tolerance_hours': 0.0})})
     if len(missions) > 2000 or len(missions) * reps > 200000:
         errors.append('Operations: 任务窗口≤2000，任务窗口数×重复次数≤200000。')
     missions.sort(key=lambda m: (m['start'], m['id']))

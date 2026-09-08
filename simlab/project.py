@@ -29,7 +29,7 @@ def model_hash(tables):
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 def check_structure(project):
-    if project.get('extensions_version', EXTENSIONS_VERSION) != EXTENSIONS_VERSION:
+    if project.get('extensions_version', 1) not in (1, EXTENSIONS_VERSION):
         raise ValueError('SimLab 扩展格式版本不支持。')
     if project.get('format') != FORMAT:
         raise ValueError('项目格式版本不支持，请使用匹配的软件版本。')
@@ -69,7 +69,7 @@ def save_project(project, path, backup=True):
     path = Path(path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     candidate = copy.deepcopy(project)
-    candidate.setdefault('extensions_version', EXTENSIONS_VERSION)
+    candidate['extensions_version'] = EXTENSIONS_VERSION
     candidate['updated'] = now()
     candidate['revision'] = str(uuid.uuid4())
     fd, tmp = tempfile.mkstemp(prefix='.save-', suffix='.sqlite', dir=path.parent)
@@ -106,7 +106,8 @@ def load_project(path):
 
 def export_package(project, destination, include_results=True):
     snapshot = copy.deepcopy(project)
-    snapshot.setdefault('extensions_version', EXTENSIONS_VERSION)
+    if snapshot.get('extensions_version', 1) == 1:
+        snapshot['extensions_version'] = EXTENSIONS_VERSION
     if not include_results:
         snapshot['runs'] = []
     check_structure(snapshot)
