@@ -7,7 +7,7 @@ from .schema import value
 
 
 SUPPORTED_OPERATIONS = {
-    'SimLabFlightRule': {'MTID', 'PREP_H'},
+    'SimLabFlightRule': {'MTID', 'PREP_H', 'PREP_TASK', 'DAILY_READY'},
     'SimLabDutyRule': {'MTID', 'MIN_QTY', 'PRIORITY', 'RELIEF_H', 'TOLERANCE_H'},
     'MissionType': {'MTID', 'NOS', 'MNOS', 'MNOSA', 'DURN', 'TFOUT', 'TFRET', 'MSUCPT'},
     'MissionSystem': {'MTID', 'SID', 'NOS', 'MNOS', 'MNOSA'},
@@ -97,6 +97,14 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
         errors.append('Operations: 任务窗口≤2000，任务窗口数×重复次数≤200000。')
     missions.sort(key=lambda m: (m['start'], m['id']))
     flight_rules = {r['MTID']: float(r['PREP_H']) for r in tables.get('SimLabFlightRule', [])}
+    ground_rules={}
+    for r in tables.get('SimLabFlightRule',[]):
+        tid=val('SimLabFlightRule',r,'PREP_TASK')
+        ready=val('SimLabFlightRule',r,'DAILY_READY')=='Y'
+        if tid or ready:
+            needs={x['RID']:int(val('TaskResource',x,'QTY')) for x in tables.get('TaskResource',[]) if x['TID']==tid and int(val('TaskResource',x,'QTY'))>0}
+            if tid and not needs:errors.append(f'SimLabFlightRule.{r["MTID"]}: PREP_TASK须配置正数量TaskResource。')
+            ground_rules[r['MTID']]=dict(task=tid,resources=needs,daily_ready=ready)
     for tid, spec in types.items():
         out, back = float(val('MissionType',spec,'TFOUT')), float(val('MissionType',spec,'TFRET'))
         if out+back > 1:
@@ -118,8 +126,15 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
             task['out_fraction'] = float(val('MissionType',spec,'TFOUT'))
             task['return_fraction'] = float(val('MissionType',spec,'TFRET'))
             task['success_fraction'] = float(val('MissionType',spec,'MSUCPT'))
+            if task['type'] in ground_rules:
+                task['ground_rule']=ground_rules[task['type']]
+                for fleet in fleets:
+                    if fleet['sid']==task['sid'] and task['location'] in (fleet['unit'],fleet['home']):
+                        for rid,qty in task['ground_rule']['resources'].items():
+                            if capacity.get((fleet['home'],rid),0)<qty:
+                                errors.append(f'SimLabFlightRule.{task["type"]}@{fleet["home"]}: 保障资源{rid}容量不足，单个作业无法执行。')
             day = int(task['start']//24)
-            if task['end'] > (day+1)*24 or task['start']-day*24 < task['flight_prep_hours']:
+            if task['end'] > (day+1)*24 or (not task.get('ground_rule',{}).get('daily_ready') and task['start']-day*24 < task['flight_prep_hours']):
                 errors.append('SimLabFlightRule: 保障开始不得早于当天00:00，飞行不得跨日。')
             pool = (task['location'], task['sid'])
             pools.setdefault(pool, set()).add(task['flight_prep_hours'])
@@ -127,6 +142,9 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
             errors.append('SimLabFlightRule: 必须配置飞行任务计划。')
         if any(len(v)>1 for v in pools.values()):
             errors.append('SimLabFlightRule: 同一选机池的保障时长须一致。')
+        for pool in pools:
+            rules=[ground_rules.get(t['type']) for t in missions if (t['location'],t['sid'])==pool]
+            if any(rule!=rules[0] for rule in rules):errors.append('SimLabFlightRule: 同一选机池须使用相同保障资源及DAILY_READY规则。')
         for fleet in fleets:
             matching = [pool for pool in pools if pool[1] == fleet['sid'] and pool[0] in (fleet['unit'], fleet['home'])]
             if len(matching)>1:
@@ -162,6 +180,11 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
         _check_common(station, rule, schedules, horizon, errors)
     for station, rule in extra_rules:
         _check_common(station, rule, schedules, horizon, errors)
+    for task in missions:
+        if 'ground_rule' in task:
+            for fleet in fleets:
+                if fleet['sid']==task['sid'] and task['location'] in (fleet['unit'],fleet['home']):
+                    _check_common(fleet['home'],task['ground_rule'],schedules,horizon,errors)
     return missions, schedules, errors
 
 

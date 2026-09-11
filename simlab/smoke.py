@@ -290,9 +290,51 @@ def run(directory):
     export_package(window.project,directory/'flight.simproj')
     loaded=import_package(directory/'flight.simproj')
     assert loaded['runs'][-1]['result']==flight_run['result']
-    assert load_project(window.project_path)['extensions_version']==5
+    from .extensions import VERSION
+    assert load_project(window.project_path)['extensions_version']==VERSION
     output['checks']+=['flight minute input and preview','invalid phase input blocked','success worker and metrics',
         'success and decision views','all replication CSV','flight v5 exchange roundtrip']
+    # v0.8: library model copy and ground preparation through the real worker.
+    source_path=window.project_path;source_id=window.project['id'];before=source_path.read_bytes()
+    window.nav.setCurrentRow(7)
+    window.library.search.setText('v0.7 飞行成功点桌面验收')
+    assert window.library.table.rowCount()==1
+    window.library.table.selectRow(0)
+    QTest.qWait(100);window.grab().save(str(directory/'15-project-library.png'))
+    QTest.mouseClick(window.library.copy_button,Qt.LeftButton)
+    assert window.project['id']!=source_id and window.project['runs']==[]
+    assert source_path.read_bytes()==before
+    tables=window.project['tables']
+    home=compile_model(tables)['fleets'][0]['home'];point=tables['Control'][0]['APID']
+    tables.setdefault('Resource',[]).append(dict(RID='GROUND_CREW'))
+    tables.setdefault('Tasks',[]).append(dict(TID='GROUND_PREP'))
+    tables.setdefault('TaskResource',[]).append(dict(TID='GROUND_PREP',RID='GROUND_CREW',QTY='1'))
+    tables.setdefault('ResourceAllocation',[]).append(dict(POINT=point,STID=home,RID='GROUND_CREW',RQTY='2'))
+    window.editor.select_table('SimLabFlightRule')
+    window.editor.grid.item(0,2).setText('GROUND_PREP')
+    window.editor.grid.item(0,3).setText('Y')
+    assert window.save()
+    window.nav.setCurrentRow(2);window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button,Qt.LeftButton)
+    deadline=time.monotonic()+60
+    while window.process is not None and time.monotonic()<deadline:QTest.qWait(50)
+    assert window.process is None and not failures,failures
+    ground_run=window.project['runs'][-1]
+    assert ground_run['status']=='completed',ground_run
+    ground=ground_run['result']['mission']['ground']
+    assert ground['completed_jobs']==18 and ground['daily_assumed_ready_aircraft']==36
+    assert ground['work_aircraft_hours']==9 and window.ground_jobs.rowCount()==18
+    from .flight_results import export_ground
+    export_ground(ground_run,directory/'ground.csv')
+    with (directory/'ground.csv').open(encoding='utf-8-sig',newline='') as file:assert len(list(csv.DictReader(file)))==54
+    window.chart_tabs.setCurrentIndex(1);window.result_tabs.setCurrentIndex(16)
+    QTest.qWait(100);window.grab().save(str(directory/'16-ground-jobs.png'))
+    window.result_tabs.setCurrentIndex(15)
+    QTest.qWait(100);window.grab().save(str(directory/'17-ground-metrics.png'))
+    export_package(window.project,directory/'ground.simproj')
+    assert import_package(directory/'ground.simproj')['runs'][-1]['result']==ground_run['result']
+    output['checks']+=['project library search','model copy preserves original','ground resource input persistence',
+        'ground worker and aggregation','ground jobs and metrics views','all preparation CSV','format6 roundtrip']
     window.close()
     app.processEvents()
     (directory/'smoke-result.json').write_text(json.dumps(output, indent=2), encoding='utf-8')

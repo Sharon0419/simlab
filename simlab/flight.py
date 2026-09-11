@@ -1,15 +1,16 @@
 """Prepared reserve pool and atomic fixed flights; no airborne replacement.
 
 Phase fractions describe outbound travel, time on station, and return travel.
-Preparation has no failure exposure or resource contention. Availability is
+Preparation has no failure exposure; optional ground rules constrain resources. Availability is
 separate from readiness, and effective mission supply excludes aborted return.
 """
 from collections import Counter
 from .missions import MissionManager
+from .ground import PreparationManager
 
 
 class FlightManager(MissionManager):
-    def __init__(self, env, tasks, assets, log=None):
+    def __init__(self, env, tasks, assets, log=None, resource_pool=None):
         self.daily = {}
         self.pools = {}
         self.preparation_hours = 0.0
@@ -18,11 +19,13 @@ class FlightManager(MissionManager):
             pool = (t['location'], t['sid'])
             day = int(t['start']//24)
             key = (pool, day)
-            self.daily[key] = min(self.daily.get(key, float('inf')), t['start']-t['flight_prep_hours'])
-            self.pools[pool] = dict(prep=t['flight_prep_hours'], day=None)
+            daily_ready=t.get('ground_rule',{}).get('daily_ready',False)
+            self.daily[key] = min(self.daily.get(key, float('inf')), t['start'] if daily_ready else t['start']-t['flight_prep_hours'])
+            self.pools[pool] = dict(prep=t['flight_prep_hours'], day=None,ground_rule=t.get('ground_rule'))
         for a in assets:
             a.update(flight_phase='idle', prep_deadline=None, sorties=0)
         super().__init__(env, tasks, assets, log)
+        self.ground=PreparationManager(self,resource_pool) if any('ground_rule' in t for t in tasks) else None
         for t in self.tasks:
             duration=t['end']-t['start']
             t.update(flight_status='scheduled', members=[], launched_at=None, ended_at=None,
@@ -30,6 +33,7 @@ class FlightManager(MissionManager):
                      success_point=t['start']+duration*t.get('success_fraction',1),
                      successful=False, success_at=None, success_phase=None,
                      success_reason='not_started', successful_members=[],
+                     cancel_reason=None,launch_readiness=None,
                      landed_at=None, landing_due=t['end'], abort_phase=None, phase=None,
                      out_end=t['start']+duration*t.get('out_fraction',0),
                      return_start=t['end']-duration*t.get('return_fraction',0),
@@ -79,6 +83,7 @@ class FlightManager(MissionManager):
         self.rebalance()
 
     def integrate(self):
+        if self.ground:self.ground.integrate()
         elapsed = self.env.now-self.last
         self.preparation_hours += elapsed*sum(a['flight_phase']=='preparing' for a in self.assets)
         self.ready_hours += elapsed*sum(a['flight_phase']=='ready' for a in self.assets)
@@ -95,6 +100,9 @@ class FlightManager(MissionManager):
         return next((p for p in self.pools if p[1]==asset['sid'] and p[0] in (asset['unit'],asset['home'])), None)
 
     def prepare(self, asset, pool):
+        if self.pools[pool]['ground_rule'] is not None:
+            self.ground.request(asset,self.pools[pool]['ground_rule'],self.pools[pool]['prep'])
+            return
         asset['flight_phase'] = 'preparing'
         deadline = self.env.now+self.pools[pool]['prep']
         asset['prep_deadline'] = deadline
@@ -113,6 +121,7 @@ class FlightManager(MissionManager):
 
     def rebalance(self):
         self.integrate()
+        if self.ground:self.ground.advance()
         before = {a['id']: a['mission'] for a in self.assets}
         # Complete flights before considering failures at their exact end boundary.
         for t in self.tasks:
@@ -154,6 +163,13 @@ class FlightManager(MissionManager):
                 self.pools[pool]['day'] = day
                 for a in self.assets:
                     if self.pool_for(a)==pool and a['mission'] is None:
+                        ground_rule=self.pools[pool]['ground_rule']
+                        if ground_rule is not None:
+                            if ground_rule['daily_ready'] and a['state']=='available':
+                                self.ground.assume_ready(a)
+                            elif a['id'] not in self.ground.active and a['state']=='available':
+                                a['flight_phase']='idle'
+                            continue
                         a['flight_phase'] = 'idle'
                         a['prep_deadline'] = None
         for a in self.assets:
@@ -163,7 +179,7 @@ class FlightManager(MissionManager):
             if a['state'] != 'available':
                 a['flight_phase'] = 'maintenance'
                 a['prep_deadline'] = None
-            elif a['flight_phase']=='preparing' and a['prep_deadline'] <= self.env.now:
+            elif a['flight_phase']=='preparing' and a['prep_deadline'] is not None and a['prep_deadline'] <= self.env.now:
                 a['flight_phase'] = 'ready'
                 a['prep_deadline'] = None
                 self.log(a['id'], '保障完成待命', '')
@@ -180,6 +196,13 @@ class FlightManager(MissionManager):
                 t['flight_status'] = 'cancelled'
                 t['ended_at'] = self.env.now
                 t['success_reason']='cancelled_unready'
+                eligible=[a for a in self.assets if self.eligible(t,a)]
+                snapshot=Counter('maintenance' if a['state']!='available' else 'airborne' if a['mission'] is not None else a['flight_phase'] for a in eligible)
+                t['launch_readiness']=dict(snapshot)
+                t['cancel_reason']=('fleet_shortage' if len(eligible)<t['quantity'] else
+                    'maintenance' if sum(a['state']=='available' for a in eligible)<t['quantity'] else
+                    'airborne' if sum(a['state']=='available' and a['mission'] is None for a in eligible)<t['quantity'] else
+                    'preparation_wait' if snapshot['waiting_preparation'] else 'preparing')
                 self.log(t['id'], '准备就绪飞机不足取消', '')
                 continue
             chosen = candidates[:t['quantity']]
@@ -235,4 +258,5 @@ class FlightManager(MissionManager):
         f.update(started_rate=f['started']/f['requested'], success_rate=f['successful']/f['requested'],
                  completion_rate=f['completed']/f['requested'],
                  all_successful=int(f['successful']==f['requested']))
+        if self.ground:result['ground']=self.ground.snapshot()
         return result

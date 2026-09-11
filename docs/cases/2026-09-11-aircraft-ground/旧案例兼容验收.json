@@ -1,0 +1,29 @@
+{
+  "replications": 1000,
+  "legacy_engine": "0.7.0",
+  "engine": "0.8.0",
+  "flight": {
+    "requested": 9.0,
+    "started": 9.0,
+    "completed": 8.475,
+    "aborted": 0.525,
+    "cancelled": 0.0,
+    "aircraft_sorties": 18.0,
+    "completed_aircraft_sorties": 16.95,
+    "preparation_aircraft_hours": 26.999,
+    "ready_aircraft_hours": 681.1250921861464,
+    "all_completed": 0.57,
+    "out_aircraft_hours": 8.957806923954243,
+    "on_station_aircraft_hours": 34.94360708513792,
+    "return_aircraft_hours": 8.957806923954243,
+    "abort_return_aircraft_hours": 0.4395216734427518,
+    "successful": 8.553,
+    "requested_aircraft_sorties": 18.0,
+    "successful_aircraft_sorties": 17.106,
+    "started_rate": 1.0,
+    "success_rate": 0.9503333333333335,
+    "completion_rate": 0.9416666666666668,
+    "all_successful": 0.615
+  },
+  "events_equal": true
+}

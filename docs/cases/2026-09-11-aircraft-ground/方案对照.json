@@ -1,0 +1,29 @@
+[
+  {
+    "groups": 1,
+    "success_rate": 0.9503333333333335,
+    "completed": 8.475,
+    "cancelled": 0.0,
+    "wait_aircraft_hours": 4.324439402515056,
+    "work_aircraft_hours": 8.999,
+    "resource_utilization": 0.12498611111111112
+  },
+  {
+    "groups": 2,
+    "success_rate": 0.9503333333333335,
+    "completed": 8.475,
+    "cancelled": 0.0,
+    "wait_aircraft_hours": 0.012503623665321923,
+    "work_aircraft_hours": 8.999,
+    "resource_utilization": 0.06249305555555556
+  },
+  {
+    "groups": 4,
+    "success_rate": 0.9503333333333335,
+    "completed": 8.475,
+    "cancelled": 0.0,
+    "wait_aircraft_hours": 0.0,
+    "work_aircraft_hours": 8.999,
+    "resource_utilization": 0.03124652777777778
+  }
+]

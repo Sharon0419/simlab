@@ -1,0 +1,113 @@
+{
+  "project_path": "C:\\Users\\sharo\\AppData\\Local\\SimLab\\projects\\aircraft-ground-1-bce17c86.sqlite",
+  "engine": "0.8.0",
+  "model_hash": "d20a87a7a12c5e8083a6b1fe31a52c5d886a000edf26a34be0fd34eb130df854",
+  "seed": 20260908,
+  "statistics": {
+    "success_rate": {
+      "mean": 0.9503333333333335,
+      "ci95": [
+        0.9461078583794239,
+        0.954558808287243
+      ]
+    },
+    "completed": {
+      "mean": 8.475,
+      "ci95": [
+        8.432920021095157,
+        8.517079978904842
+      ]
+    },
+    "cancelled": {
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "failures": {
+      "mean": 0.53,
+      "ci95": [
+        0.4873863840695227,
+        0.5726136159304773
+      ]
+    },
+    "resource_utilization": {
+      "mean": 0.12498611111111112,
+      "ci95": [
+        0.12496684874595124,
+        0.125005373476271
+      ]
+    },
+    "requested_jobs": {
+      "mean": 17.998,
+      "ci95": [
+        17.995226219416978,
+        18.000773780583025
+      ]
+    },
+    "completed_jobs": {
+      "mean": 17.998,
+      "ci95": [
+        17.995226219416978,
+        18.000773780583025
+      ]
+    },
+    "assumed_jobs": {
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "waiting_jobs": {
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "working_jobs": {
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "wait_aircraft_hours": {
+      "mean": 4.324439402515056,
+      "ci95": [
+        4.3043289768448,
+        4.344549828185312
+      ]
+    },
+    "work_aircraft_hours": {
+      "mean": 8.999,
+      "ci95": [
+        8.997613109708489,
+        9.000386890291512
+      ]
+    },
+    "wait_resource_aircraft_hours": {
+      "mean": 4.324439402515056,
+      "ci95": [
+        4.3043289768448,
+        4.344549828185312
+      ]
+    },
+    "wait_shift_aircraft_hours": {
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "daily_assumed_ready_aircraft": {
+      "mean": 36.0,
+      "ci95": [
+        36.0,
+        36.0
+      ]
+    }
+  }
+}

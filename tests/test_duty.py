@@ -122,7 +122,8 @@ def test_legacy_defaults_and_version_upgrade(tmp_path):
     assert config['missions'][0]['minimum'] == 15
     assert config['missions'][0]['relief_hours'] == 0
     save_project(project, tmp_path/'old.sqlite')
-    assert load_project(tmp_path/'old.sqlite')['extensions_version'] == 5
+    from simlab.extensions import VERSION
+    assert load_project(tmp_path/'old.sqlite')['extensions_version'] == VERSION
     project['tables']['SimLabDutyRule'] = [dict(MTID='DUTY', MIN_QTY='12')]
     export_package(project, tmp_path/'duty.simproj')
     restored = import_package(tmp_path/'duty.simproj')

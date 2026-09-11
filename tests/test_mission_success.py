@@ -110,18 +110,19 @@ def test_success_point_never_changes_physical_trajectory(rep):
     assert results[0]==results[1]==results[2]==results[3]
 
 
-@pytest.mark.parametrize('version',[1,2,3,4])
+@pytest.mark.parametrize('version',[1,2,3,4,5])
 def test_project_upgrade_preserves_historical_result(tmp_path,version):
     p=new_project();p['extensions_version']=version
     p['runs']=[dict(id='legacy',result={'engine':'0.6.0','mission':{'flight':{'completed':9}}})]
     old=copy.deepcopy(p['runs'])
     save_project(p,tmp_path/'saved.sqlite')
-    assert load_project(tmp_path/'saved.sqlite')['extensions_version']==5
+    from simlab.extensions import VERSION
+    assert load_project(tmp_path/'saved.sqlite')['extensions_version']==VERSION
     assert p['runs']==old
     p['extensions_version']=version
     export_package(p,tmp_path/'export.simproj')
     loaded=import_package(tmp_path/'export.simproj')
-    assert loaded['extensions_version']==5 and loaded['runs']==old
+    assert loaded['extensions_version']==VERSION and loaded['runs']==old
 
 
 def test_native_csv_recomputes_success_and_preserves_members(tmp_path):

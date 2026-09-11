@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 5
+VERSION = 6
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):
@@ -27,5 +27,8 @@ TABLES['SimLabDutyRule'] = [
 
 TABLES['SimLabFlightRule'] = [
     field('MTID', 'Index', '固定飞行任务类型（SimLab 扩展）', references='MissionType MTID'),
-    field('PREP_H', 'Mandatory', '每天首波、回收及修复后的保障时长', 'Floating point', unit='Hours'),
+    field('PREP_H', 'Mandatory', '一次完整再次出动准备时长；首波假设除外', 'Floating point', unit='Hours'),
+    field('PREP_TASK', 'Regular', '再次出动准备所需资源任务（留空无资源约束）', references='Tasks TID'),
+    field('DAILY_READY', 'Regular', '每天首波健康地面飞机假定已提前准备好：Y或N', default='N'),
 ]
+TABLES['SimLabFlightRule'][-1]['constraints']='Multiple choice: Y, N'

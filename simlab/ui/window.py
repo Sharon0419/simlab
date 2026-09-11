@@ -20,11 +20,13 @@ from ..missions import GAP_LABELS
 from ..maintenance import PHASES
 from ..validation import validate
 from ..compiler import compile_model, ModelError
-from ..flight_results import export_tasks, REASONS, PHASES as FLIGHT_PHASES, STATUSES
+from ..flight_results import export_tasks, export_ground, REASONS, PHASES as FLIGHT_PHASES, STATUSES, CANCEL_REASONS, GROUND_STATUSES
 from .flight_timing import clock
 from .modeling import ModelEditor
 from .structure import StructureView
 from .duty import DutyPlanner
+from ..project_library import ProjectLibrary,copy_model
+from .library import LibraryPage
 from .widgets import STYLE, label, button, card, Metric, AvailabilityChart, MissionChart
 
 def readonly_table(headers):
@@ -62,6 +64,7 @@ class MainWindow(QMainWindow):
         self.active_run = None
         self.cancelled = False
         self.loading_controls = False
+        self.catalog=ProjectLibrary(self.data_dir)
         self.setWindowTitle('SimLab · 本机保障仿真工作台')
         self.resize(1480, 940)
         self.setMinimumSize(1120, 760)
@@ -112,6 +115,7 @@ class MainWindow(QMainWindow):
         self.nav.addItems(['01   项目概览', '02   模型数据', '03   仿真实验', '04   结果分析', '05   建模说明'])
         self.nav.addItem('06   组成结构')
         self.nav.addItem('07   值守计划')
+        self.nav.addItem('08   项目库')
         self.nav.currentRowChanged.connect(self.navigate)
         sl.addWidget(self.nav, 1)
         bottom = label(f'●  本机运行 · 数据本地保存\n\nSIMLOX 2017 字段基线\nv{__version__}  /  独立开发', 'SidebarSub')
@@ -150,6 +154,11 @@ class MainWindow(QMainWindow):
         self.duty_planner.changed.connect(self.duty_changed)
         self.duty_planner.example_requested.connect(self.new_duty_demo)
         self.pages.addWidget(self.duty_planner)
+        self.library=LibraryPage(self.catalog)
+        self.library.open_requested.connect(self.library_open)
+        self.library.copy_requested.connect(self.library_copy)
+        self.library.import_requested.connect(self.import_dialog)
+        self.pages.addWidget(self.library)
         rl.addWidget(self.pages, 1)
         root.addWidget(right, 1)
         self.nav.setCurrentRow(0)
@@ -161,6 +170,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         head = QHBoxLayout()
         head.addWidget(label('项目概览', 'PageTitle'))
+        head.addWidget(button('进入项目库',lambda:self.nav.setCurrentRow(7)))
         head.addStretch()
         head.addWidget(button('重命名项目', self.rename_project))
         self.mission_demo_button = button('新建任务日历示例', self.new_mission_demo, True)
@@ -339,6 +349,12 @@ class MainWindow(QMainWindow):
         self.flight_table = readonly_table(['飞行评估指标', '跨重复试验均值'])
         self.success_table = readonly_table(['任务', '计划成功点', '成功点比例', '起飞率', '成功率 FMSUC', '完整完成率', '成功架次均值'])
         self.success_details = readonly_table(['首轮任务', '物理终态', '成功判定', '实际成功时间', '成功阶段', '判定原因', '成员', '成功成员'])
+        self.ground_table=readonly_table(['准备评估指标','跨轮均值'])
+        self.ground_jobs=readonly_table(['首轮飞机','作业','排队时刻/h','开始/h','结束/h','等待/h','作业/h','状态'])
+        self.cancel_table=readonly_table(['首轮取消任务','主要分类','起飞时飞机状态分布'])
+        ground_page=QWidget();ground_layout=QVBoxLayout(ground_page)
+        ground_layout.addWidget(button('导出全部轮次准备作业 CSV',self.export_ground_details))
+        ground_layout.addWidget(self.ground_jobs)
         self.flight_phase_table = readonly_table(['飞行任务', '计划出航 / 小时', '计划执行 / 小时', '计划返航 / 小时',
                                                   '实际出航 / 架·小时', '实际执行 / 架·小时', '实际返航 / 架·小时', '其中中止返航 / 架·小时'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
@@ -346,7 +362,8 @@ class MainWindow(QMainWindow):
                               ('任务窗口', self.mission_table), ('任务缺口', self.gap_table),
                               ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table),
                               ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals), ('飞行与备用机', self.flight_table), ('飞行阶段', self.flight_phase_table),
-                              ('任务成功率', self.success_table), ('首轮成功判定', self.success_details)]:
+                              ('任务成功率', self.success_table), ('首轮成功判定', self.success_details),
+                              ('准备资源评估',self.ground_table),('再次出动准备',ground_page),('取消原因',self.cancel_table)]:
             tabs.addTab(widget, title)
         self.result_tabs = tabs
         layout.addWidget(tabs, 2)
@@ -380,6 +397,7 @@ class MainWindow(QMainWindow):
         <p>0.6 飞行模式：在SimLabFlightRule填MTID、PREP_H；在MissionType填DURN、TFOUT、TFRET。比例各为0～1，和≤1；任务区比例自动为剩余部分。例如DURN=3、TFOUT=TFRET=1/6，对应出航0.5h、执行2h、返航0.5h。表格中比例须填数值小数。零比例兼容旧案例。飞行不得跨日，保障时间另算。出航中止按已出航比例折算返航，任务区中止按完整返航，返航中止按剩余时间；健康部件返航时仍可故障，飞机落地后才能维修或准备。多故障LRU落地后依次处理。</p>
         <p>全部任务须为飞行模式，不能混用值守规则；同池保障时长一致。每日首波前全池保障，按累计出动少者优先选机。准点凑齐整队才能起飞，不足取消；故障整队中止、空中不补位。保障无资源约束、不累计故障。“飞行阶段”区分实际三阶段时间和中止返航时间；后者不计有效任务供给。本地完成判据不是原厂MSUCPT成功点。</p>
         <p>0.7 增加 MSUCPT 成功点（0～1，默认1）。起飞后达到该点即成功，同刻故障优先算成功；之后中止不撤销成功。结果分别显示任务成功率FMSUC与完整完成率。模型数据下方可按分钟输入并预览；逐轮飞行CSV导出所有任务判定。旧结果不推算成功值，需要重跑。</p>
+        <p>0.8 可在SimLabFlightRule配置PREP_TASK，引用Tasks/TaskResource及ResourceAllocation的保障资源。半小时为一次完整再次出动准备；资源全部到齐才开始，班内开始、跨班继续，同刻准备完成先于起飞。DAILY_READY=Y表示每天首波健康地面飞机假定已提前保障，未完准备单独记作“首波假设接续完成”，不计正常完工且释放资源。故障机仍需修复。准备资源评估和再次出动准备页可查看及导出。</p>
         <p>FRT=1000 且 OPID=OPHOURS，表示平均每 1000 个运行小时发生一次故障。UTIL=0.5 表示每个可用日历小时累计 0.5 个运行小时。</p>
         <p>串联关键部件故障使设备停机，停机期间不累计运行故障。层级模式保留健康叶子的剩余故障预算，修复叶子下次运行再抽样。暂不支持冗余、老化、预防性维修和供应中断。</p>
         <h3>0.2 任务与班次</h3>
@@ -415,6 +433,24 @@ class MainWindow(QMainWindow):
                 self.sync_controls()
             if index == 0:
                 self.refresh_overview()
+            if index == 7:
+                self.library.refresh()
+
+    def library_open(self,path):
+        try:
+            self.open_path(path)
+            self.nav.setCurrentRow(0)
+        except Exception as error:self.warn('打开项目失败',str(error))
+
+    def library_copy(self,path):
+        if self.process is not None:
+            self.warn('计算仍在运行','请结束当前实验后复制方案。');return
+        if self.dirty and not self.save():return
+        try:
+            project=copy_model(path)
+            self.adopt_project(project,self.data_dir/'projects'/f'{project["id"][:12]}.sqlite')
+            self.nav.setCurrentRow(0)
+        except Exception as error:self.warn('复制模型失败',str(error))
 
     def adopt_project(self, project, path, save=True):
         if self.process is not None:
@@ -436,6 +472,8 @@ class MainWindow(QMainWindow):
             self.lock.unlock()
         self.lock = new_lock
         self.project, self.project_path, self.dirty = project, path, False
+        try:self.catalog.remember(path)
+        except (OSError,ValueError) as error:self.statusBar().showMessage('项目已打开，但项目库索引未更新：'+str(error),15000)
         interrupted = False
         for run in project['runs']:
             if run.get('status') == 'running':
@@ -781,7 +819,7 @@ class MainWindow(QMainWindow):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
         self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
         self.maintenance_export_button.setEnabled(bool(run and run['result'].get('maintenance')))
-        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table, self.success_table, self.success_details):
+        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table, self.success_table, self.success_details,self.ground_table,self.ground_jobs,self.cancel_table):
             table.setRowCount(0)
         if not run:
             for metric in self.result_cards:
@@ -815,6 +853,21 @@ class MainWindow(QMainWindow):
         self.mission_chart.set_samples(result['samples'] if mission else [])
         if mission:
             flight = mission.get('flight')
+            ground=mission.get('ground')
+            if ground:
+                labels={'requested_jobs':'请求准备作业 / 次','completed_jobs':'正常完成 / 次','assumed_jobs':'每日首波假设接续未完作业 / 次',
+                    'waiting_jobs':'期末排队 / 次','working_jobs':'期末作业中 / 次','wait_aircraft_hours':'准备总等待 / 架·小时',
+                    'work_aircraft_hours':'实际准备作业 / 架·小时','wait_resource_aircraft_hours':'班内等待资源或队列 / 架·小时',
+                    'wait_shift_aircraft_hours':'等待共同班次 / 架·小时','daily_assumed_ready_aircraft':'每日首波假定已保障 / 架次'}
+                fill_table(self.ground_table,[[labels[k],f'{v:.3f}'] for k,v in ground.items() if k!='jobs'])
+                fill_table(self.ground_jobs,[[j['asset'],j['task'],f'{j["requested_at"]:.3f}',
+                    f'{j["started_at"]:.3f}' if j['started_at'] is not None else '—',
+                    f'{j["ended_at"]:.3f}' if j['ended_at'] is not None else '—',f'{j["wait_hours"]:.3f}',f'{j["work_hours"]:.3f}',
+                    GROUND_STATUSES[j['status']]] for j in ground['jobs']])
+            if flight:
+                fill_table(self.cancel_table,[[t['id'],CANCEL_REASONS.get(t.get('cancel_reason'),'历史结果未分类'),
+                    '；'.join(f'{dict(maintenance="维修中",airborne="飞行占用",ready="已就绪",preparing="准备作业中",waiting_preparation="准备排队",idle="未准备").get(k,k)} {v}架' for k,v in (t.get('launch_readiness') or {}).items())]
+                    for t in result['replication_results'][0]['mission']['tasks'] if t['flight_status']=='cancelled'])
             if flight:
                 labels = {'requested':'计划编队任务 / 次', 'started':'实际起飞编队 / 次',
                           'completed':'完整完成编队 / 次', 'aborted':'飞行中止编队 / 次',
@@ -928,6 +981,15 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage('逐轮飞行明细已导出：'+path,10000)
             except Exception as error:
                 self.warn('导出失败',str(error))
+
+    def export_ground_details(self):
+        run=self.selected_run()
+        if not run or not (run['result'].get('mission') or {}).get('ground'):
+            self.warn('没有准备作业结果','请选择配置准备资源或每日首波就绪假设的实验。');return
+        path,_=QFileDialog.getSaveFileName(self,'导出全部准备作业','再次出动准备.csv','CSV (*.csv)')
+        if path:
+            try:export_ground(run,path)
+            except Exception as error:self.warn('导出失败',str(error))
 
     def export_missions(self):
         path, _ = QFileDialog.getSaveFileName(self, '导出任务窗口结果', '任务结果.csv', 'CSV (*.csv)')

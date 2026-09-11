@@ -75,6 +75,16 @@ class ResourcePool:
             assert self.free[key] <= self.capacity[key]
         self.dispatch()
 
+    def cancel(self, event):
+        """Remove an ungranted ground request; granted resources need release."""
+        for request in self.queue:
+            if request[2] is event:
+                self.queue.remove(request)
+                event.succeed(False)
+                self.dispatch()
+                return True
+        return False
+
 def run_one(config, replication=0, progress=None):
     env = simpy.Environment()
     failure_rng = np.random.default_rng(np.random.SeedSequence([replication, 0, config['seed']]))
@@ -225,7 +235,8 @@ def run_one(config, replication=0, progress=None):
             env.process(operate(asset, fleet))
     if config.get('missions'):
         manager_type = FlightManager if 'flight_prep_hours' in config['missions'][0] else MissionManager
-        mission_manager = manager_type(env, config['missions'], assets, log)
+        mission_manager = (manager_type(env, config['missions'], assets, log, resource_pool=pool)
+                           if manager_type is FlightManager else manager_type(env, config['missions'], assets, log))
     initial_parts = len(locations)
     initial_by_item = dict(Counter(r['iid'] for r in components.records.values()))
     def observe():
@@ -322,6 +333,10 @@ def simulate(tables, progress=None):
         if results[0]['mission'].get('flight'):
             mission['flight'] = {key: float(np.mean([r['mission']['flight'][key] for r in results]))
                                  for key in results[0]['mission']['flight']}
+        if results[0]['mission'].get('ground'):
+            mission['ground']={key:float(np.mean([r['mission']['ground'][key] for r in results]))
+                               for key in results[0]['mission']['ground'] if key!='jobs'}
+            mission['ground']['jobs']=results[0]['mission']['ground']['jobs']
         for i, first in enumerate(results[0]['mission']['tasks']):
             task = {key: first[key] for key in ('id', 'type', 'location', 'sid', 'quantity', 'start', 'end', 'demand_hours', 'minimum', 'priority', 'relief_hours', 'tolerance_hours')}
             for key in ('supplied_hours', 'gap_hours', 'below_hours', 'longest_below_hours', 'minimum_rate'):
@@ -341,6 +356,8 @@ def simulate(tables, progress=None):
                     task[key] = float(np.mean([r['mission']['tasks'][i][key] for r in results]))
                 task['flight_rates'] = {status: float(np.mean([r['mission']['tasks'][i]['flight_status']==status for r in results]))
                                        for status in ('completed','aborted','cancelled')}
+                task['cancel_rates'] = {reason:float(np.mean([r['mission']['tasks'][i]['cancel_reason']==reason for r in results]))
+                                        for reason in ('fleet_shortage','maintenance','airborne','preparation_wait','preparing')}
             mission['tasks'].append(task)
     if progress:
         progress(1.0)
@@ -359,5 +376,6 @@ def simulate(tables, progress=None):
             'events': results[0]['events'], 'events_truncated': results[0]['events_truncated'],
             'replication_results': [{k: v for k, v in r.items() if k not in ('samples', 'events', 'components', 'maintenance')} for r in results],
             'assumptions': ('System/LRU/SRU 串联；基地换LRU、站内维修SRU；叶子指数故障；' if config.get('children') else '一层串联 LRU；指数故障；') + '两级维修闭环；资源组合原子申请；班内启动、跨班继续。' +
-                ('固定飞行；每日全池保障；整队起飞/故障中止；空中不补位；TFOUT/TFRET三阶段及中止返航；返航健康部件继续故障，落地后故障LRU依次处理；保障无资源约束且不累计故障。' if mission and mission.get('flight') else
+                ('固定飞行；整队起飞/故障中止，空中不补位；三阶段中止返航，落地后故障LRU依次处理；再次出动准备按资源组合排队、班内开始跨班继续，不累计故障；DAILY_READY按输入逐池执行，首波假设接续未完作业单列，故障机不恢复。' if mission and mission.get('ground') else
+                 '固定飞行；每日全池保障；整队起飞/故障中止；空中不补位；TFOUT/TFRET三阶段及中止返航；返航健康部件继续故障，落地后故障LRU依次处理；保障无资源约束且不累计故障。' if mission and mission.get('flight') else
                  '固定值守窗口；优先级分配、不抢占；故障退出、按规则准备补位；待命和准备不累计运行故障；最低保障按事件积分。' if mission else '连续使用率；无任务调度。')}

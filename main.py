@@ -21,6 +21,8 @@ def main():
             window.open_path(sys.argv[2])
         except Exception as error:
             QMessageBox.warning(window, '打开项目失败', str(error))
+    else:
+        window.nav.setCurrentRow(7)
     window.show()
     return app.exec()
 
