@@ -11,6 +11,7 @@ from ..schema import TABLES, CORE_TABLES, table_label, field_label, category, de
 from ..compiler import SUPPORTED, DOCUMENTARY
 from ..validation import choices
 from .widgets import label, button
+from .flight_timing import FlightTiming
 
 class FieldDelegate(QStyledItemDelegate):
     def __init__(self, editor):
@@ -114,6 +115,10 @@ class ModelEditor(QWidget):
         self.grid.currentCellChanged.connect(self.selected_field)
         self.grid.paste_requested.connect(self.paste)
         ml.addWidget(self.grid, 1)
+        self.flight_timing=FlightTiming()
+        self.flight_timing.applied.connect(self.timing_applied)
+        ml.addWidget(self.flight_timing)
+        self.flight_timing.hide()
         self.support_label = label('', 'Muted', True)
         ml.addWidget(self.support_label)
         splitter.addWidget(middle)
@@ -183,6 +188,19 @@ class ModelEditor(QWidget):
         self.tree.setCurrentItem(self.nodes[name])
         self.tree.blockSignals(False)
         self.show_field(fields[0])
+        self.refresh_timing()
+    def refresh_timing(self):
+        rows=self.project['tables'].get('MissionType',[]) if self.project else []
+        visible=self.current_table=='MissionType' and bool(rows)
+        self.flight_timing.setVisible(visible)
+        if visible:
+            index=max(0,self.grid.currentRow())
+            self.flight_timing.bind(self.project,rows[min(index,len(rows)-1)])
+    def timing_applied(self):
+        row=self.grid.currentRow()
+        self.select_table('MissionType')
+        self.grid.setCurrentCell(max(0,row),0)
+        self.changed.emit()
     def show_field(self, field):
         esc = html.escape
         supported = field['id'] in SUPPORTED.get(self.current_table, set()) | DOCUMENTARY
@@ -202,12 +220,14 @@ class ModelEditor(QWidget):
             text += '<p style="color:#f3c77a">FRT 按每百万运行参数单位计。OPHOURS 下 MTBF = 1,000,000 / FRT 小时。</p>'
         self.info.setHtml('<div style="font-family:Microsoft YaHei UI;font-size:12px;padding:10px">'+text+'</div>')
     def selected_field(self, row, col, prevrow, prevcol):
+        if not self.loading:self.refresh_timing()
         if col >= 0:
             self.show_field(TABLES[self.current_table][col])
     def cell_changed(self, item):
         if self.loading or not self.project:
             return
         self.project['tables'][self.current_table][item.row()][TABLES[self.current_table][item.column()]['id']] = item.text()
+        self.refresh_timing()
         self.changed.emit()
     def add_row(self):
         if not self.project:

@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 4
+VERSION = 5
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):

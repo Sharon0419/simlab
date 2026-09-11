@@ -332,6 +332,11 @@ def simulate(tables, progress=None):
                 task['flight_prep_hours'] = first['flight_prep_hours']
                 task['out_fraction'] = first.get('out_fraction',0)
                 task['return_fraction'] = first.get('return_fraction',0)
+                task['success_fraction'] = first['success_fraction']
+                task['success_point'] = first['success_point']
+                task['success_rate'] = float(np.mean([r['mission']['tasks'][i]['successful'] for r in results]))
+                task['started_rate'] = float(np.mean([r['mission']['tasks'][i]['launched_at'] is not None for r in results]))
+                task['successful_aircraft_sorties'] = float(np.mean([len(r['mission']['tasks'][i]['successful_members']) for r in results]))
                 for key in ('out_aircraft_hours','on_station_aircraft_hours','return_aircraft_hours','abort_return_aircraft_hours'):
                     task[key] = float(np.mean([r['mission']['tasks'][i][key] for r in results]))
                 task['flight_rates'] = {status: float(np.mean([r['mission']['tasks'][i]['flight_status']==status for r in results]))

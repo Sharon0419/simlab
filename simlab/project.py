@@ -29,7 +29,7 @@ def model_hash(tables):
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 def check_structure(project):
-    if project.get('extensions_version', 1) not in (1, 2, 3, EXTENSIONS_VERSION):
+    if project.get('extensions_version', 1) not in (1, 2, 3, 4, EXTENSIONS_VERSION):
         raise ValueError('SimLab 扩展格式版本不支持。')
     if project.get('format') != FORMAT:
         raise ValueError('项目格式版本不支持，请使用匹配的软件版本。')
@@ -106,7 +106,7 @@ def load_project(path):
 
 def export_package(project, destination, include_results=True):
     snapshot = copy.deepcopy(project)
-    if snapshot.get('extensions_version', 1) in (1, 2, 3):
+    if snapshot.get('extensions_version', 1) in (1, 2, 3, 4):
         snapshot['extensions_version'] = EXTENSIONS_VERSION
     if not include_results:
         snapshot['runs'] = []

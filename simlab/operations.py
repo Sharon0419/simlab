@@ -9,7 +9,7 @@ from .schema import value
 SUPPORTED_OPERATIONS = {
     'SimLabFlightRule': {'MTID', 'PREP_H'},
     'SimLabDutyRule': {'MTID', 'MIN_QTY', 'PRIORITY', 'RELIEF_H', 'TOLERANCE_H'},
-    'MissionType': {'MTID', 'NOS', 'MNOS', 'MNOSA', 'DURN', 'TFOUT', 'TFRET'},
+    'MissionType': {'MTID', 'NOS', 'MNOS', 'MNOSA', 'DURN', 'TFOUT', 'TFRET', 'MSUCPT'},
     'MissionSystem': {'MTID', 'SID', 'NOS', 'MNOS', 'MNOSA'},
     'Operations': {'USTID', 'PRID'},
     'OperationProfile': {'PRID', 'SPRID', 'STIM'},
@@ -103,6 +103,8 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
             errors.append(f'MissionType.{tid}: TFOUT+TFRET不能超过1。')
         if (out or back) and tid not in flight_rules:
             errors.append(f'MissionType.{tid}: 非零阶段比例需要SimLabFlightRule飞行模式。')
+        if float(val('MissionType',spec,'MSUCPT')) != 1 and tid not in flight_rules:
+            errors.append(f'MissionType.{tid}: MSUCPT成功点仅支持SimLabFlightRule固定飞行模式。')
     if flight_rules:
         pools = {}
         for task in missions:
@@ -115,6 +117,7 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
             spec = types[task['type']]
             task['out_fraction'] = float(val('MissionType',spec,'TFOUT'))
             task['return_fraction'] = float(val('MissionType',spec,'TFRET'))
+            task['success_fraction'] = float(val('MissionType',spec,'MSUCPT'))
             day = int(task['start']//24)
             if task['end'] > (day+1)*24 or task['start']-day*24 < task['flight_prep_hours']:
                 errors.append('SimLabFlightRule: 保障开始不得早于当天00:00，飞行不得跨日。')

@@ -26,11 +26,37 @@ class FlightManager(MissionManager):
         for t in self.tasks:
             duration=t['end']-t['start']
             t.update(flight_status='scheduled', members=[], launched_at=None, ended_at=None,
+                     success_fraction=t.get('success_fraction',1),
+                     success_point=t['start']+duration*t.get('success_fraction',1),
+                     successful=False, success_at=None, success_phase=None,
+                     success_reason='not_started', successful_members=[],
                      landed_at=None, landing_due=t['end'], abort_phase=None, phase=None,
                      out_end=t['start']+duration*t.get('out_fraction',0),
                      return_start=t['end']-duration*t.get('return_fraction',0),
                      out_aircraft_hours=0.0, on_station_aircraft_hours=0.0,
                      return_aircraft_hours=0.0, abort_return_aircraft_hours=0.0)
+
+    def record_success(self, task):
+        """Observe only: never integrate, rebalance, draw RNG or signal an asset.
+
+        Equality belongs to success, independently of same-time SimPy ordering.
+        An earlier abort blocks success even if the aircraft is still returning.
+        """
+        point = task['success_point']
+        if task['successful'] or task['launched_at'] is None or self.env.now < point:
+            return
+        if task['flight_status']=='aborted' and task['ended_at'] < point:
+            return
+        phase = ('LANDED' if point == task['end'] else
+                 'OUT' if point < task['out_end'] else
+                 'ON_STATION' if point < task['return_start'] else 'BACK')
+        task.update(successful=True, success_at=point, success_phase=phase,
+                    success_reason='success_point_reached', successful_members=list(task['members']))
+        self.log(task['id'], '达到任务成功点', f'{point:g};{phase};'+','.join(task['members']))
+
+    def observe_success(self, task):
+        yield self.env.timeout(task['success_point']-self.env.now)
+        self.record_success(task)
 
     def normal_phase(self, task):
         if self.env.now < task['out_end']:
@@ -93,6 +119,7 @@ class FlightManager(MissionManager):
             if t['flight_status'] not in ('launched','aborted') or t['landed_at'] is not None:
                 continue
             members = [a for a in self.assets if a['mission']==t['id']]
+            self.record_success(t)
             ended = self.env.now >= t['landing_due']
             failed = any(a['state']!='available' for a in members)
             if t['flight_status']=='launched' and not ended and failed:
@@ -100,6 +127,8 @@ class FlightManager(MissionManager):
                 t['landing_due']=self.env.now+self.return_duration(t)
                 t['flight_status']='aborted'
                 t['ended_at'] = self.env.now
+                if not t['successful']:
+                    t['success_reason']='aborted_before_success_point'
                 self.log(t['id'], '编队故障中止', f'{t["abort_phase"]};落地={t["landing_due"]:g}')
                 self.env.process(self.returning(t))
                 ended=self.env.now>=t['landing_due']
@@ -150,12 +179,14 @@ class FlightManager(MissionManager):
             if self.env.now != t['start'] or len(candidates)<t['quantity']:
                 t['flight_status'] = 'cancelled'
                 t['ended_at'] = self.env.now
+                t['success_reason']='cancelled_unready'
                 self.log(t['id'], '准备就绪飞机不足取消', '')
                 continue
             chosen = candidates[:t['quantity']]
             t['flight_status'] = 'launched'
             t['launched_at'] = self.env.now
             t['members'] = [a['id'] for a in chosen]
+            t['success_reason']='awaiting_success_point'
             t['phase']=self.normal_phase(t)
             for a in chosen:
                 a['mission'] = t['id']
@@ -163,6 +194,10 @@ class FlightManager(MissionManager):
                 a['sorties'] += 1
             self.log(t['id'], '编队统一起飞', ','.join(t['members']))
             self.log(t['id'], '飞行阶段', t['phase'])
+            if t['success_point']==self.env.now:
+                self.record_success(t)
+            else:
+                self.env.process(self.observe_success(t))
         for a in self.assets:
             if before[a['id']] != a['mission']:
                 signal = a['assignment_event']
@@ -193,4 +228,11 @@ class FlightManager(MissionManager):
             all_completed=int(counts['completed']==len(self.tasks)))
         for key in ('out_aircraft_hours','on_station_aircraft_hours','return_aircraft_hours','abort_return_aircraft_hours'):
             result['flight'][key]=sum(t[key] for t in self.tasks)
+        f=result['flight']
+        f.update(successful=sum(t['successful'] for t in self.tasks),
+                 requested_aircraft_sorties=sum(t['quantity'] for t in self.tasks),
+                 successful_aircraft_sorties=sum(len(t['successful_members']) for t in self.tasks))
+        f.update(started_rate=f['started']/f['requested'], success_rate=f['successful']/f['requested'],
+                 completion_rate=f['completed']/f['requested'],
+                 all_successful=int(f['successful']==f['requested']))
         return result

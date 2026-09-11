@@ -1,8 +1,8 @@
 # SimLab 本机保障仿真工作台
 
-当前版本 **0.6.0**：支持MissionType.TFOUT/TFRET出航/返航比例、三阶段时间统计，以及故障中止后的实际返航和落地维修。保留每日全池保障、备用选机、整队起飞及旧固定值守。见 [0.6 阶段比例使用说明](docs/V0.6.md)。
+当前版本 **0.7.0**：增加 MissionType.MSUCPT 成功点、任务/飞机成功统计、分钟辅助输入与时间轴预览、全部逐轮判定CSV。成功率与完整完成率分别显示，保留三阶段、备用机、返航维修及旧固定值守。见 [0.7 使用说明](docs/V0.7.md)及[指标字典](docs/METRIC_DICTIONARY.md)。
 
-下一步为 [v0.7 任务成功判定与评估闭环](docs/V0.7-PLAN.md)。完整顺序见 [开发路线图](docs/ROADMAP.md)；当前案例与Git复现说明见 [案例目录](docs/cases/README.md)。
+下一步为保障资源与回收周转约束，见[下一步计划](docs/NEXT_VERSION_PLAN.md)。完整顺序见 [开发路线图](docs/ROADMAP.md)；当前案例与Git复现说明见 [案例目录](docs/cases/README.md)。
 
 从软件架构了解实现、领域模型与后续开发路线，请阅读 [架构与交付方案](docs/ARCHITECTURE.md)。
 

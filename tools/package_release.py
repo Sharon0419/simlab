@@ -20,8 +20,13 @@ for name in ['PySide6-Essentials', 'shiboken6', 'simpy', 'numpy', 'pyinstaller']
                 shutil.copy2(source, destination)
 shutil.copy2(root/'docs'/'VERIFICATION.md', folder/'VERIFICATION.md')
 (folder/'docs').mkdir(exist_ok=True)
-for name in ['ARCHITECTURE.md', 'DIAGRAMS.md', 'V0.2.md', 'V0.3.md', 'V0.4.md', 'V0.5.md', 'V0.6.md']:
+for name in ['ARCHITECTURE.md', 'DIAGRAMS.md', 'V0.2.md', 'V0.3.md', 'V0.4.md', 'V0.5.md', 'V0.6.md', 'V0.7.md', 'V0.7-SPEC.md', 'METRIC_DICTIONARY.md']:
     shutil.copy2(root/'docs'/name, folder/'docs'/name)
+case = root/'docs/cases/2026-09-08-aircraft-three-days/success-v0.7'
+if case.exists():
+    shutil.copytree(case, folder/'docs/cases/success-v0.7', dirs_exist_ok=True)
+    for source in case.glob('*.simproj'):
+        shutil.copy2(source, folder/'examples'/source.name)
 output = root/'dist'/f'SimLab-Windows-v{__version__}.zip'
 with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
     for file in sorted(folder.rglob('*')):

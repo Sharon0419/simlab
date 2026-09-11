@@ -237,6 +237,62 @@ def run(directory):
     output['duty_minimum_rate'] = duty['minimum_rate']
     output['duty_qualified_rate'] = duty['qualified_rate']
     output['duty_relief_gap_hours'] = duty['gap_reasons']['relief']
+    # v0.7: actual editor, isolated worker, success UI and both CSV paths.
+    from .sample import mission_project
+    from .flight_results import export_tasks
+    from .compiler import compile_model
+    import csv
+    flight_project=mission_project()
+    flight_project['name']='v0.7 飞行成功点桌面验收'
+    tables=flight_project['tables']
+    sid=tables['System'][0]['SID'];location=tables['SystemDeployment'][0]['USTID']
+    tables['SystemDeployment']=[dict(SID=sid,USTID=location,QTYPS='12',UTIL='1')]
+    for row in tables['Item']:row['FRT']='0'
+    tables['MissionType']=[dict(MTID='FLIGHT',NOS='2',MNOS='2',DURN='3')]
+    tables['MissionSystem']=[dict(MTID='FLIGHT',SID=sid)]
+    tables['Operations']=[dict(USTID=location,PRID='P')]
+    tables['OperationProfile']=[dict(PRID='P',SPRID='FLIGHT',STIM=str(d*24+h)) for d in range(3) for h in (9,12,15)]
+    tables['SimLabFlightRule']=[dict(MTID='FLIGHT',PREP_H='.5')]
+    tables['Control'][0].update(SIMPE='72',NREPS='3')
+    window.adopt_project(flight_project,directory/'flight.sqlite')
+    window.nav.setCurrentRow(1);window.editor.select_table('MissionType')
+    helper=window.editor.flight_timing
+    assert helper.isVisible()
+    for spin,v in zip(helper.inputs,(180,30,30,150)):spin.setValue(v)
+    assert '11:30:00' in helper.summary.text()
+    helper.inputs[2].setValue(180)
+    assert not helper.apply_button.isEnabled()
+    helper.inputs[2].setValue(30)
+    QTest.mouseClick(helper.apply_button,Qt.LeftButton)
+    assert compile_model(window.project['tables'])['missions'][0]['success_fraction']==5/6
+    assert window.save()
+    QTest.qWait(100);window.grab().save(str(directory/'12-flight-timing.png'))
+    window.nav.setCurrentRow(2)
+    window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button,Qt.LeftButton)
+    deadline=time.monotonic()+60
+    while window.process is not None and time.monotonic()<deadline:QTest.qWait(50)
+    assert window.process is None, 'Flight worker timed out'
+    assert not failures,failures
+    flight_run=window.project['runs'][-1]
+    assert flight_run['status']=='completed',flight_run
+    assert flight_run['result']['mission']['flight']['successful']==9
+    assert window.success_table.rowCount()==window.success_details.rowCount()==9
+    window.chart_tabs.setCurrentIndex(1);window.result_tabs.setCurrentIndex(13)
+    QTest.qWait(100);window.grab().save(str(directory/'13-flight-success.png'))
+    window.result_tabs.setCurrentIndex(14)
+    QTest.qWait(100);window.grab().save(str(directory/'14-flight-decisions.png'))
+    window.export_missions_path(directory/'flight-summary.csv')
+    export_tasks(flight_run,directory/'flight-details.csv',True)
+    with (directory/'flight-details.csv').open(encoding='utf-8-sig',newline='') as file:
+        detail=list(csv.DictReader(file))
+    assert len(detail)==27 and all(row['successful']=='True' for row in detail)
+    export_package(window.project,directory/'flight.simproj')
+    loaded=import_package(directory/'flight.simproj')
+    assert loaded['runs'][-1]['result']==flight_run['result']
+    assert load_project(window.project_path)['extensions_version']==5
+    output['checks']+=['flight minute input and preview','invalid phase input blocked','success worker and metrics',
+        'success and decision views','all replication CSV','flight v5 exchange roundtrip']
     window.close()
     app.processEvents()
     (directory/'smoke-result.json').write_text(json.dumps(output, indent=2), encoding='utf-8')

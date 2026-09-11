@@ -134,4 +134,4 @@ def test_invalid_flight_inputs_rejected(change):
 def test_extension_v2_project_remains_readable(tmp_path):
     p=new_project(); p['extensions_version']=2
     save_project(p,tmp_path/'legacy.sqlite')
-    assert load_project(tmp_path/'legacy.sqlite')['extensions_version']==4
+    assert load_project(tmp_path/'legacy.sqlite')['extensions_version']==5

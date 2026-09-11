@@ -20,6 +20,8 @@ from ..missions import GAP_LABELS
 from ..maintenance import PHASES
 from ..validation import validate
 from ..compiler import compile_model, ModelError
+from ..flight_results import export_tasks, REASONS, PHASES as FLIGHT_PHASES, STATUSES
+from .flight_timing import clock
 from .modeling import ModelEditor
 from .structure import StructureView
 from .duty import DutyPlanner
@@ -292,6 +294,7 @@ class MainWindow(QMainWindow):
         head.addWidget(button('导出结果 CSV', self.export_results))
         self.mission_export_button = button('导出任务 CSV', self.export_missions)
         head.addWidget(self.mission_export_button)
+        head.addWidget(button('逐轮飞行 CSV', self.export_flight_details))
         self.maintenance_export_button = button('维修 CSV', self.export_maintenance)
         head.addWidget(self.maintenance_export_button)
         head.addWidget(button('从快照建立分支', self.branch_from_result))
@@ -334,13 +337,16 @@ class MainWindow(QMainWindow):
         self.duty_table = readonly_table(['窗口', '目标 / 最低', '达标时间比例', '窗口合格率', '平均不达标 / 小时', '最长连续均值 / 小时'])
         self.duty_intervals = readonly_table(['首轮不达标窗口', '开始 / 小时', '结束 / 小时', '实际 / 最低', '缺口原因分摊（设备数）'])
         self.flight_table = readonly_table(['飞行评估指标', '跨重复试验均值'])
+        self.success_table = readonly_table(['任务', '计划成功点', '成功点比例', '起飞率', '成功率 FMSUC', '完整完成率', '成功架次均值'])
+        self.success_details = readonly_table(['首轮任务', '物理终态', '成功判定', '实际成功时间', '成功阶段', '判定原因', '成员', '成功成员'])
         self.flight_phase_table = readonly_table(['飞行任务', '计划出航 / 小时', '计划执行 / 小时', '计划返航 / 小时',
                                                   '实际出航 / 架·小时', '实际执行 / 架·小时', '实际返航 / 架·小时', '其中中止返航 / 架·小时'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
                               ('首轮事件', self.events_table), ('实验对比', self.compare_table),
                               ('任务窗口', self.mission_table), ('任务缺口', self.gap_table),
                               ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table),
-                              ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals), ('飞行与备用机', self.flight_table), ('飞行阶段', self.flight_phase_table)]:
+                              ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals), ('飞行与备用机', self.flight_table), ('飞行阶段', self.flight_phase_table),
+                              ('任务成功率', self.success_table), ('首轮成功判定', self.success_details)]:
             tabs.addTab(widget, title)
         self.result_tabs = tabs
         layout.addWidget(tabs, 2)
@@ -373,6 +379,7 @@ class MainWindow(QMainWindow):
         <h3>运行口径</h3>
         <p>0.6 飞行模式：在SimLabFlightRule填MTID、PREP_H；在MissionType填DURN、TFOUT、TFRET。比例各为0～1，和≤1；任务区比例自动为剩余部分。例如DURN=3、TFOUT=TFRET=1/6，对应出航0.5h、执行2h、返航0.5h。表格中比例须填数值小数。零比例兼容旧案例。飞行不得跨日，保障时间另算。出航中止按已出航比例折算返航，任务区中止按完整返航，返航中止按剩余时间；健康部件返航时仍可故障，飞机落地后才能维修或准备。多故障LRU落地后依次处理。</p>
         <p>全部任务须为飞行模式，不能混用值守规则；同池保障时长一致。每日首波前全池保障，按累计出动少者优先选机。准点凑齐整队才能起飞，不足取消；故障整队中止、空中不补位。保障无资源约束、不累计故障。“飞行阶段”区分实际三阶段时间和中止返航时间；后者不计有效任务供给。本地完成判据不是原厂MSUCPT成功点。</p>
+        <p>0.7 增加 MSUCPT 成功点（0～1，默认1）。起飞后达到该点即成功，同刻故障优先算成功；之后中止不撤销成功。结果分别显示任务成功率FMSUC与完整完成率。模型数据下方可按分钟输入并预览；逐轮飞行CSV导出所有任务判定。旧结果不推算成功值，需要重跑。</p>
         <p>FRT=1000 且 OPID=OPHOURS，表示平均每 1000 个运行小时发生一次故障。UTIL=0.5 表示每个可用日历小时累计 0.5 个运行小时。</p>
         <p>串联关键部件故障使设备停机，停机期间不累计运行故障。层级模式保留健康叶子的剩余故障预算，修复叶子下次运行再抽样。暂不支持冗余、老化、预防性维修和供应中断。</p>
         <h3>0.2 任务与班次</h3>
@@ -774,7 +781,7 @@ class MainWindow(QMainWindow):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
         self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
         self.maintenance_export_button.setEnabled(bool(run and run['result'].get('maintenance')))
-        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table):
+        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table, self.success_table, self.success_details):
             table.setRowCount(0)
         if not run:
             for metric in self.result_cards:
@@ -817,7 +824,20 @@ class MainWindow(QMainWindow):
                           'ready_aircraft_hours':'已保障待命 / 架·小时', 'all_completed':'整轮全部任务完成比例',
                           'out_aircraft_hours':'实际出航 / 架·小时', 'on_station_aircraft_hours':'实际任务区执行 / 架·小时',
                           'return_aircraft_hours':'实际返航 / 架·小时（含中止返航）', 'abort_return_aircraft_hours':'其中中止返航 / 架·小时'}
-                fill_table(self.flight_table, [[labels[k], f'{v:.2%}' if k=='all_completed' else f'{v:.3f}'] for k,v in flight.items()])
+                labels.update(requested='计划编队任务 NMREQ / 次',started='实际起飞编队 NMSTA / 次',
+                    successful='成功编队 NMSUC / 次',requested_aircraft_sorties='请求 NSYRQ / 架次',
+                    aircraft_sorties='起飞 NSYST / 架次',successful_aircraft_sorties='成功 NSYSU / 架次',
+                    started_rate='起飞率 FMSTA',success_rate='成功率 FMSUC',completion_rate='完整完成率',all_successful='整轮全部任务成功比例')
+                fill_table(self.flight_table, [[labels.get(k,k), f'{v:.2%}' if k.endswith('_rate') or k in ('all_completed','all_successful') else f'{v:.3f}'] for k,v in flight.items()])
+                if 'success_rate' in flight:
+                    fill_table(self.success_table,[[t['id'],clock(t['success_point']),f'{t["success_fraction"]:.2%}',
+                        f'{t["started_rate"]:.2%}',f'{t["success_rate"]:.2%}',f'{t["flight_rates"]["completed"]:.2%}',
+                        f'{t["successful_aircraft_sorties"]:.3f}'] for t in mission['tasks']])
+                    fill_table(self.success_details,[[t['id'],STATUSES.get(t['flight_status'],t['flight_status']),
+                        '成功' if t['successful'] else '未成功',clock(t['success_at']) if t['success_at'] is not None else '—',
+                        FLIGHT_PHASES.get(t['success_phase'],'—'),REASONS.get(t['success_reason'],t['success_reason']),
+                        ', '.join(t['members']),', '.join(t['successful_members'])]
+                        for t in result['replication_results'][0]['mission']['tasks']])
                 phase_rows=[]
                 for t in mission['tasks']:
                     if 'out_fraction' not in t:
@@ -833,6 +853,7 @@ class MainWindow(QMainWindow):
             if flight:
                 phase_note='三阶段时间见“飞行阶段”；中止后返航不计有效任务供给。' if 'return_aircraft_hours' in flight else '历史结果：返航耗时按0。'
                 self.mission_summary.setText(self.mission_summary.text()+f'\n飞行模式：整队起飞、故障中止、空中不补位；完整完成 {flight["completed"]:.3f}/{flight["requested"]:g} 次，整轮全部完成 {flight["all_completed"]:.2%}。{phase_note}')
+                self.mission_summary.setText(self.mission_summary.text()+('\n成功率 FMSUC '+f'{flight["success_rate"]:.2%}；成功与中止可同时发生。逐轮飞行CSV包含所有轮次判定。' if 'success_rate' in flight else '\n历史结果未计算成功点，请使用v0.7重新运行；原结果保留。'))
             if 'minimum_rate' in mission and not flight:
                 detail_note = '（已截断）' if mission.get('intervals_truncated') else ''
                 self.mission_summary.setText(self.mission_summary.text() + f'\n最低保障达标率 {mission["minimum_rate"]:.2%} · 值守窗口合格率 {mission["qualified_rate"]:.2%}；不达标时段为首轮、最多5000条{detail_note}。合计曲线不能代替各任务判定。')
@@ -893,14 +914,20 @@ class MainWindow(QMainWindow):
         run = self.selected_run()
         if not run or not run['result'].get('mission'):
             raise ValueError('本实验没有任务结果。')
-        columns = ['id', 'start', 'end', 'quantity', 'demand_hours', 'supplied_hours', 'gap_hours', 'full_window_rate']
-        if 'minimum_rate' in run['result']['mission']:
-            columns += ['minimum', 'priority', 'relief_hours', 'tolerance_hours', 'minimum_rate', 'qualified_rate', 'below_hours', 'longest_below_hours']
-        with open(path, 'w', encoding='utf-8-sig', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['run_id', 'model_hash', 'seed'] + columns)
-            for task in run['result']['mission']['tasks']:
-                writer.writerow([run['id'], run['model_hash'], run['result']['seed']] + [task[key] for key in columns])
+        export_tasks(run,path)
+
+    def export_flight_details(self):
+        run=self.selected_run()
+        if not run or not (run['result'].get('mission') or {}).get('flight'):
+            self.warn('没有飞行结果','请先选择固定飞行实验。')
+            return
+        path,_=QFileDialog.getSaveFileName(self,'导出所有轮次飞行判定','逐轮飞行判定.csv','CSV (*.csv)')
+        if path:
+            try:
+                export_tasks(run,path,detailed=True)
+                self.statusBar().showMessage('逐轮飞行明细已导出：'+path,10000)
+            except Exception as error:
+                self.warn('导出失败',str(error))
 
     def export_missions(self):
         path, _ = QFileDialog.getSaveFileName(self, '导出任务窗口结果', '任务结果.csv', 'CSV (*.csv)')

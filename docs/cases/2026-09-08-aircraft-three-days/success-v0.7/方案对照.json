@@ -1,0 +1,38 @@
+[
+  {
+    "aircraft": 2,
+    "started": 5.973,
+    "successful": 5.669,
+    "completed": 5.612,
+    "aborted": 0.361,
+    "cancelled": 3.027,
+    "success_rate": 0.6298888888888889,
+    "completion_rate": 0.6235555555555554,
+    "all_successful": 0.0,
+    "fulfillment": 0.6435256389813224
+  },
+  {
+    "aircraft": 4,
+    "started": 8.969,
+    "successful": 8.521,
+    "completed": 8.438,
+    "aborted": 0.531,
+    "cancelled": 0.031,
+    "success_rate": 0.9467777777777779,
+    "completion_rate": 0.9375555555555557,
+    "all_successful": 0.609,
+    "fulfillment": 0.9665428038053945
+  },
+  {
+    "aircraft": 12,
+    "started": 9.0,
+    "successful": 8.553,
+    "completed": 8.475,
+    "aborted": 0.525,
+    "cancelled": 0.0,
+    "success_rate": 0.9503333333333335,
+    "completion_rate": 0.9416666666666668,
+    "all_successful": 0.615,
+    "fulfillment": 0.9707351714741417
+  }
+]
