@@ -89,7 +89,6 @@ assert load_project(path)['runs'][0]['result']==result
 package=OUT/'飞机随机故障1000次-含结果.simproj'
 export_package(p,package)
 assert import_package(package)['runs'][0]['result']==result
-(ROOT/'打开飞机随机故障评估.cmd').write_bytes(('@echo off\r\nstart "" "%~dp0dist\\SimLab\\SimLab.exe" --project "'+str(path)+'"\r\n').encode('ascii'))
 summary=dict(project_path=str(path),replications=1000,scope=args.scope,model_hash=result['model_hash'],statistics=stats,
     checks=['1000 replications verified','48 parts conserved each run','flight demand=supply+gap',
             'component failures sum to aircraft failures','nonzero stochastic variance','SQLite and simproj exact result roundtrip'])
@@ -136,7 +135,7 @@ P05/P95为逐轮总量分位数，95%区间为跨1000轮均值的t区间；两�
 
 ## 文件与运行
 
-双击仓库根目录“打开飞机随机故障评估.cmd”打开保存结果；也可导入本目录“飞机随机故障1000次-含结果.simproj”。输入、逐轮CSV及统计JSON一起保存。原无故障项目保留。
+双击根目录“启动SimLab.cmd”，在项目库选择本案例打开保存结果；也可导入本目录“飞机随机故障1000次-含结果.simproj”。输入、逐轮CSV及统计JSON一起保存。原无故障项目保留。
 
 复现：先运行 `.venv/Scripts/python.exe tools/run_aircraft_random_case.py prepare` 生成输入，再用 `dist/SimLab/SimLab.exe --worker build/aircraft-random-component/input.json build/aircraft-random-component/result.json` 仿真，最后执行 `.venv/Scripts/python.exe tools/run_aircraft_random_case.py report`。整机MTBF100口径需在脚本命令增加 `--scope aircraft` 并使用对应工作目录。
 

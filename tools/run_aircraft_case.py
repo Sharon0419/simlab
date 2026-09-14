@@ -176,6 +176,4 @@ v0.4没有独立的出动前保障工序或原子编队放飞规则，本案例�
 已通过9组检查：编译、总数守恒、9波计划、分阶段小时手算、同机完成保障再飞行、编队不重叠、间隔时间、数据库重开、项目包往返。详细数据见结果汇总JSON、任务阶段结果CSV和飞机分配CSV。
 '''
 (OUT/'案例报告.md').write_text(report,encoding='utf-8')
-launcher=f'@echo off\r\ncd /d "{ROOT}"\r\nstart "" "{ROOT / "dist" / "SimLab" / "SimLab.exe"}" --project "{project_path}"\r\n'
-(ROOT/'打开飞机案例.cmd').write_bytes(launcher.encode('ascii'))
 print(json.dumps(summary,ensure_ascii=False,indent=2))

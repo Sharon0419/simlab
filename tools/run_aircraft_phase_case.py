@@ -83,7 +83,6 @@ export_package(p,OUT/'飞机三阶段-模型.simproj',False)
 assert import_package(OUT/'飞机三阶段-含1000次结果.simproj')['runs'][0]['result']==result
 summary=dict(project_path=str(path),engine=result['engine'],replications=1000,model_hash=result['model_hash'],statistics=stats)
 (OUT/'统计汇总.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
-(ROOT/'打开飞机三阶段案例.cmd').write_bytes(('@echo off\r\nstart "" "%~dp0dist\\SimLab\\SimLab.exe" --project "'+str(path)+'"\r\n').encode('ascii'))
 lines=[]
 for key,label in [('started','起飞编队'),('completed','完整完成编队'),('aborted','中止编队'),('cancelled','起飞前取消'),
     ('out_aircraft_hours','实际出航架·小时'),('on_station_aircraft_hours','实际任务区架·小时'),('return_aircraft_hours','实际返航架·小时'),
@@ -115,7 +114,7 @@ report='''# v0.6 三阶段飞机案例：1000次
 
 ## 配置和打开
 
-双击根目录“打开飞机三阶段案例.cmd”；在“模型数据→MissionType”编辑DURN、TFOUT、TFRET。比例填小数0～1，两者之和≤1；任务区比例自动取余量。须同时配置SimLabFlightRule，固定值守不接受非零比例。旧0/0比例继续有效。
+双击根目录“启动SimLab.cmd”，在项目库选择本案例；在“模型数据→MissionType”编辑DURN、TFOUT、TFRET。比例填小数0～1，两者之和≤1；任务区比例自动取余量。须同时配置SimLabFlightRule，固定值守不接受非零比例。旧0/0比例继续有效。
 
 “结果分析→飞行阶段”显示每波计划阶段时长及实际均值；“飞行与备用机”显示汇总；“首轮事件”可查看阶段切换、中止和落地。“逐轮指标.csv”含1000行和各阶段统计，“统计汇总.json”另含P05/P95。
 

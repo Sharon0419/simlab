@@ -76,9 +76,6 @@ summary = dict(replications=1000, horizon_hours=72, model_hash=model_hash(tables
     verification=['1000 per-replication assertions', 'input/result hash equality',
                   'SQLite full result roundtrip', 'simproj full result roundtrip'])
 (OUT/'统计汇总.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
-launcher = ROOT/'打开飞机1000次评估.cmd'
-launcher.write_bytes(('@echo off\r\nstart "" "%~dp0dist\\SimLab\\SimLab.exe" --project "'
-                      +str(project_path)+'"\r\n').encode('ascii'))
 report = '''# 飞机三天出动：1000 次评估与 SIMLOX 指标对照
 
 已用本机 dist/SimLab/SimLab.exe 的 worker 实际执行 1000 次，并逐轮核验。每轮独立重置为同一三天场景；不是连续运行 3000 天。没有执行原厂 SIMLOX 对照仿真，也不代表两套引擎已通过一致性认证。
@@ -123,7 +120,7 @@ report = '''# 飞机三天出动：1000 次评估与 SIMLOX 指标对照
 
 ## 使用及复核
 
-双击仓库根目录“打开飞机1000次评估.cmd”，打开独立项目查看已保存的 1000 次结果；也可在软件导入同目录“飞机1000次评估-含结果.simproj”。原先单次案例保留。
+双击根目录“启动SimLab.cmd”，在项目库选择本案例，打开独立项目查看已保存的 1000 次结果；也可在软件导入同目录“飞机1000次评估-含结果.simproj”。原先单次案例保留。
 
 “逐轮指标.csv”提供 1000 行数据；“统计汇总.json”保存均值、标准差、P05/P95、均值区间、输入哈希和实际 worker 原始结果的 SHA-256。原始结果位于 build/aircraft-1000/result.json，并完整封装于项目包。
 

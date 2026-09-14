@@ -93,7 +93,6 @@ export_package(p,OUT/'飞机备用机-模型.simproj',False)
 assert import_package(OUT/'飞机备用机-含1000次结果.simproj')['runs'][0]['result']==result
 summary=dict(project_path=str(path),replications=1000,statistics=stats,model_hash=result['model_hash'],engine=result['engine'])
 (OUT/'统计汇总.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
-(ROOT/'打开飞机备用机案例.cmd').write_bytes(('@echo off\r\nstart "" "%~dp0dist\\SimLab\\SimLab.exe" --project "'+str(path)+'"\r\n').encode('ascii'))
 lines=[]
 for key,label in [('availability','健康可用度'),('failures','故障次数'),('started','起飞编队数'),('completed','完整完成编队数'),('aborted','中止编队数'),('cancelled','起飞前取消数'),('aircraft_sorties','实际起飞架次'),('completed_aircraft_sorties','完整完成架次'),('flight_aircraft_hours','飞行装备时间'),('STF','飞行装备时间满足率'),('completion_rate','编队完整完成率'),('all_completed','整轮9项全部完成比例'),('preparation_aircraft_hours','保障装备时间'),('ready_aircraft_hours','已保障待命装备时间')]:
     s=stats[key]; scale=100 if key in ('availability','STF','completion_rate','all_completed') else 1
@@ -125,7 +124,7 @@ report='''# 飞机备用机案例：v0.5、1000次
 
 ## 打开与复现
 
-双击仓库根目录“打开飞机备用机案例.cmd”。软件“结果分析→飞行与备用机”查看独立统计，“首轮事件”查看选机和准备日志；“模型数据”修改SimLabFlightRule.PREP_H及运行计划。案例包可导入v0.5及后续兼容版本，旧v0.4不支持新增规则。
+双击根目录“启动SimLab.cmd”，在项目库选择本案例。软件“结果分析→飞行与备用机”查看独立统计，“首轮事件”查看选机和准备日志；“模型数据”修改SimLabFlightRule.PREP_H及运行计划。案例包可导入v0.5及后续兼容版本，旧v0.4不支持新增规则。
 
 复现：`.venv/Scripts/python.exe tools/run_aircraft_reserve_case.py prepare`，再用 `dist/SimLab/SimLab.exe --worker build/aircraft-reserve/input.json build/aircraft-reserve/result.json`，最后运行 `.venv/Scripts/python.exe tools/run_aircraft_reserve_case.py report`。
 

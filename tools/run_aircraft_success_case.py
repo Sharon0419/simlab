@@ -115,7 +115,6 @@ def report():
             path=Path(os.environ['LOCALAPPDATA'])/'SimLab/projects'/f'aircraft-success-{project["id"][:12]}.sqlite'
             save_project(project,path);assert load_project(path)['runs'][0]['result']==r
             summary['project_path']=str(path)
-            (ROOT/'打开飞机成功点案例.cmd').write_bytes(('@echo off\r\nstart "" "%~dp0dist\\SimLab\\SimLab.exe" --project "'+str(path)+'"\r\n').encode('ascii'))
             # Same engine and seed: first replication reproduced exactly, including events.
             again=run_one(compile_model(tables),0)
             assert again['mission']==r['replication_results'][0]['mission']
@@ -153,7 +152,7 @@ def report():
 
 ## 启动与复现
 
-主案例：双击根目录“打开飞机成功点案例.cmd”；其他容量用“导入项目”打开对应simproj。结果分析中的“任务成功率”“首轮成功判定”“逐轮飞行CSV”分别查看汇总和全轮明细。
+主案例：双击根目录“启动SimLab.cmd”，在项目库选择本案例；其他容量用“导入项目”打开对应simproj。结果分析中的“任务成功率”“首轮成功判定”“逐轮飞行CSV”分别查看汇总和全轮明细。
 
 复现命令（在项目根目录）：
 
