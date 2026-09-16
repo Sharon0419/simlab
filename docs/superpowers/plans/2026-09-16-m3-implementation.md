@@ -33,38 +33,38 @@ Result contract: each replication adds `supply` and `service` dicts, containing 
 
 ## Task 1: Inputs and compilation
 
-- [ ] Write behavioral tests using demo_project: M3 triples allowed only with explicit mode; illegal route and duplicate policy rejected; legacy scenario still compiles; probabilities/resources/preventive fields reject invalid values; v10 package roundtrip.
-- [ ] Run `.venv/Scripts/python.exe -m pytest tests/test_m3_config.py -q`, observe missing-feature failures.
-- [ ] Implement the spec tables/Chinese metadata and strict compiler, including mode-aware repair validation and feasible resource/shift checks.
-- [ ] Run focused tests plus test_core/test_modeling_chinese/test_project_library; record evidence and report any integration assumptions.
+- [x] Write behavioral tests using demo_project: M3 triples allowed only with explicit mode; illegal route and duplicate policy rejected; legacy scenario still compiles; probabilities/resources/preventive fields reject invalid values; v10 package roundtrip.
+- [x] Run `.venv/Scripts/python.exe -m pytest tests/test_m3_config.py -q`, observe missing-feature failures.
+- [x] Implement the spec tables/Chinese metadata and strict compiler, including mode-aware repair validation and feasible resource/shift checks.
+- [x] Run focused tests plus test_core/test_modeling_chinese/test_project_library; record evidence and report any integration assumptions.
 
 ## Task 2: Supply ledger and runtime
 
-- [ ] Encode S1–S10 as deterministic SimPy tests. Example: order6 with b stock2/2h and a stock10/5h must yield two arrivals (2,2) and (5,4), not six duplicates.
-- [ ] Run `.venv/Scripts/python.exe -m pytest tests/test_m3_supply.py -q` before implementation.
-- [ ] Implement single-writer ledger, shortest allocation, sponsorship, periodic/threshold, simultaneous receipts, finite-horizon snapshots, explicit caps, physical validation.
-- [ ] Re-run focused tests; inspect full ledger conservation, including alternate-supplier arrival after sponsored parent replenishment.
+- [x] Encode S1–S10 as deterministic SimPy tests. Example: order6 with b stock2/2h and a stock10/5h must yield two arrivals (2,2) and (5,4), not six duplicates.
+- [x] Run `.venv/Scripts/python.exe -m pytest tests/test_m3_supply.py -q` before implementation.
+- [x] Implement single-writer ledger, shortest allocation, sponsorship, periodic/threshold, simultaneous receipts, finite-horizon snapshots, explicit caps, physical validation.
+- [x] Re-run focused tests; inspect full ledger conservation, including alternate-supplier arrival after sponsored parent replenishment.
 
 ## Task 3: Maintenance runtime and engine integration
 
-- [ ] Write M1–M10 behavioral tests first, including direct leaf, parent+SRU, flight and continuous models; run to observe failures.
-- [ ] Implement mode-gated engine path, supply wiring, independent mode RNG, onsite/offsite jobs, nested locks, leaf preventive clocks, CALENDAR quarantine and corrective coverage.
-- [ ] Preserve legacy entry behavior and aggregate M3 snapshots across repetitions. Verify no-infinite-failure returns for FRT=0 preventive scenarios.
-- [ ] Run `.venv/Scripts/python.exe -m pytest tests/test_m3_service.py tests/test_aging.py tests/test_maintenance.py tests/test_flight.py -q`.
+- [x] Write M1–M10 behavioral tests first, including direct leaf, parent+SRU, flight and continuous models; run to observe failures.
+- [x] Implement mode-gated engine path, supply wiring, independent mode RNG, onsite/offsite jobs, nested locks, leaf preventive clocks, CALENDAR quarantine and corrective coverage.
+- [x] Preserve legacy entry behavior and aggregate M3 snapshots across repetitions. Verify no-infinite-failure returns for FRT=0 preventive scenarios.
+- [x] Run `.venv/Scripts/python.exe -m pytest tests/test_m3_service.py tests/test_aging.py tests/test_maintenance.py tests/test_flight.py -q`.
 
 ## Task 4: UI, exchange, examples and integration acceptance
 
-- [ ] Add Chinese M3 result tables and all-replication CSV with model/version/seed IDs; add a three-level demonstrator covering supply and both repair kinds.
-- [ ] Test CSV values, package roundtrip, worker execution and visible tables; extend desktop smoke without weakening prior checks.
-- [ ] Run full pytest and source smoke; correct issues with focused regression before rerunning relevant checks.
-- [ ] Generate deterministic scenario report and 1000-repetition case, validate physical/order/time conservation and saved-result replay.
+- [x] Add Chinese M3 result tables and all-replication CSV with model/version/seed IDs; add a three-level demonstrator covering supply and both repair kinds.
+- [x] Test CSV values, package roundtrip, worker execution and visible tables; extend desktop smoke without weakening prior checks.
+- [x] Run full pytest and source smoke; correct issues with focused regression before rerunning relevant checks.
+- [x] Generate deterministic scenario report and 1000-repetition case, validate physical/order/time conservation and saved-result replay.
 
 ## Task 5: Review, build and install
 
-- [ ] Independent review of actual diff versus approved design; fix important correctness/spec issues and add regression evidence.
-- [ ] Build via tools/build_windows.ps1 into isolated output, run packaged smoke and compare source/EXE sample results.
-- [ ] Preserve installed release as named backup, update original dist/SimLab without touching project databases; verify installed smoke and ZIP CRC.
-- [ ] Update verification, feature guide, roadmap and Obsidian with actual results and any remaining limitations. Commit/push reviewed changes and verify remote hash.
+- [x] Independent review of actual diff versus approved design; fix important correctness/spec issues and add regression evidence.
+- [x] Build via tools/build_windows.ps1 into isolated output, run packaged smoke and compare source/EXE sample results.
+- [x] Preserve running legacy release; install alongside at original dist/SimLab-v0.10.0 and update unified launcher without touching old project databases; verify installed smoke and ZIP CRC.
+- [x] Update verification, feature guide, roadmap and Obsidian with actual results and any remaining limitations. Commit/push reviewed changes and verify remote hash.
 
 ## Interface conflict preflight
 
@@ -79,3 +79,5 @@ Result contract: each replication adds `supply` and `service` dicts, containing 
 
 - Baseline ada3f00: clean isolated worktree build/m3-worktree, branch codex/m3-supply-maintenance. Existing218 tests passed.
 - Ruling: reuse installed .venv through a junction in isolated worktree; original source/installed package untouched during implementation — avoids redundant dependency downloads — wrong-path risk controlled by explicit workdir in every command.
+
+- Final implementation:319 pytest passed; source/package/installed63 desktop checks each; both1000-rep M3 cases audited; source/saved/finalEXE replay and old-reader rejection passed. Final code review findings closed. Parallel install preserves running legacy application; unified launcher prefers v0.10.0.

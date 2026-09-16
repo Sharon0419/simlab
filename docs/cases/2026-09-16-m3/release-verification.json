@@ -1,0 +1,15 @@
+{
+  "2026-09-16-m3": {
+    "source_saved_exe_first_replication_equal": true
+  },
+  "2026-09-16-m3-periodic": {
+    "source_saved_exe_first_replication_equal": true
+  },
+  "legacy-PERFECT": {
+    "source_saved_exe_first_replication_equal": true
+  },
+  "legacy-MINIMAL": {
+    "source_saved_exe_first_replication_equal": true
+  },
+  "format9_reader_rejects_format10": true
+}

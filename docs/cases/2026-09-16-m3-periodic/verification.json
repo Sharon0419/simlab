@@ -1,0 +1,15 @@
+{
+  "replications": 1000,
+  "orders": 7594,
+  "shipments": 8989,
+  "service_jobs": 13384,
+  "preventive_jobs": 12059,
+  "physical_and_order_conservation": true,
+  "model_hash": "ee0bec387c023d5d0ab8464c286e0564fdf9e899852c4db249384f154598db79",
+  "seed": 20260916,
+  "engine": "0.10.0",
+  "availability": 0.9681163473275614,
+  "mission_success_rate": 0.9210000000000002,
+  "package_roundtrip": true,
+  "source_exe_saved_first_replication_equal": true
+}

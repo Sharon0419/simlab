@@ -70,3 +70,7 @@ Verification after the fix:
 - Whole-suite concurrent checkpoint: **312 passed,5 failed**. The five failures are newly added, in-progress configuration validation tests owned by the configuration agent (negative threshold, initial-clock bound, stock-calendar context, corrective coverage, relocated PM method compatibility). No service or legacy regression failed.
 
 This resolves the review finding; final integration/release verification remains with the root task.
+
+## Independent scoped closure — 4c27141 (2026-09-16)
+
+**PASS; simultaneous-registration P2 closed by independent re-review.** The context manager defers all `advance()` calls until the complete due set is registered; nested stock callbacks cannot acquire locks halfway through registration. Due/quarantine state is still synchronous. Independently ran four structure-order/stock-parent parameter combinations together with result regressions: **6 passed, 24 deselected in 0.82s**. A separate integration probe additionally combined calendar maintenance, flight-hour inspection and component PM due at t=3: after landing t=4, calendar runs4–5, inspection5–6, component PM6–9, followed by one preparation at9. No new issue in this fix scope.

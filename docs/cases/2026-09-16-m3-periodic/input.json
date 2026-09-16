@@ -1,0 +1,498 @@
+{
+  "SimLabExecution": [
+    {
+      "MODE": "M3"
+    }
+  ],
+  "System": [
+    {
+      "SID": "AIRCRAFT",
+      "DESCR": "三级保障演示飞机",
+      "FRT": "0"
+    }
+  ],
+  "Item": [
+    {
+      "IID": "POWER",
+      "DESCR": "动力模块",
+      "TYPE": "LRU",
+      "FRT": "20000"
+    }
+  ],
+  "MaterielStructure": [
+    {
+      "MID": "POWER",
+      "MMID": "AIRCRAFT",
+      "QTYPM": "1"
+    }
+  ],
+  "Station": [
+    {
+      "STID": "CENTER",
+      "DESCR": "中心修理仓",
+      "TYPE": "DEPOT"
+    },
+    {
+      "STID": "REGION",
+      "DESCR": "区域仓",
+      "TYPE": "STORE"
+    },
+    {
+      "STID": "BASE",
+      "DESCR": "飞行基地",
+      "TYPE": "OP"
+    }
+  ],
+  "StationStructure": [
+    {
+      "STID": "BASE",
+      "MSTID": "REGION",
+      "TFRMS": "0",
+      "TTOMS": "0"
+    },
+    {
+      "STID": "REGION",
+      "MSTID": "CENTER",
+      "TFRMS": "0",
+      "TTOMS": "0"
+    }
+  ],
+  "Unit": [
+    {
+      "UNID": "FLEET",
+      "STID": "BASE",
+      "DESCR": "演示飞行分队"
+    }
+  ],
+  "SystemDeployment": [
+    {
+      "SID": "AIRCRAFT",
+      "USTID": "FLEET",
+      "QTYPS": "4",
+      "UTIL": "1"
+    }
+  ],
+  "StockAllocation": [
+    {
+      "POINT": "BASELINE",
+      "IID": "POWER",
+      "STID": "BASE",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "POWER",
+      "STID": "REGION",
+      "STSIZ": "1"
+    },
+    {
+      "POINT": "BASELINE",
+      "IID": "POWER",
+      "STID": "CENTER",
+      "STSIZ": "6"
+    }
+  ],
+  "Resource": [
+    {
+      "RID": "TECH",
+      "TYPE": "SPECIAL",
+      "DESCR": "保障人员"
+    },
+    {
+      "RID": "BAY",
+      "TYPE": "SPECIAL",
+      "DESCR": "维修工位"
+    }
+  ],
+  "ResourceAllocation": [
+    {
+      "POINT": "BASELINE",
+      "STID": "BASE",
+      "RID": "TECH",
+      "RQTY": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "STID": "BASE",
+      "RID": "BAY",
+      "RQTY": "1"
+    },
+    {
+      "POINT": "BASELINE",
+      "STID": "REGION",
+      "RID": "TECH",
+      "RQTY": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "STID": "REGION",
+      "RID": "BAY",
+      "RQTY": "1"
+    },
+    {
+      "POINT": "BASELINE",
+      "STID": "CENTER",
+      "RID": "TECH",
+      "RQTY": "2"
+    },
+    {
+      "POINT": "BASELINE",
+      "STID": "CENTER",
+      "RID": "BAY",
+      "RQTY": "1"
+    }
+  ],
+  "Tasks": [
+    {
+      "TID": "FIX",
+      "DESCR": "维修与检测"
+    },
+    {
+      "TID": "CHANGE",
+      "DESCR": "拆装与准备"
+    }
+  ],
+  "TaskResource": [
+    {
+      "TID": "FIX",
+      "RID": "TECH",
+      "QTY": "1"
+    },
+    {
+      "TID": "FIX",
+      "RID": "BAY",
+      "QTY": "1"
+    },
+    {
+      "TID": "CHANGE",
+      "RID": "TECH",
+      "QTY": "1"
+    }
+  ],
+  "Control": [
+    {
+      "NREPS": "1000",
+      "SIMPE": "72",
+      "RCINT": "1",
+      "RSEED": "20260916",
+      "APID": "BASELINE",
+      "ENPM": "N",
+      "ENLAT": "N",
+      "ENALU": "N",
+      "RELOP": "SERIAL",
+      "ENLOG": "Y"
+    }
+  ],
+  "MissionType": [
+    {
+      "MTID": "FLIGHT",
+      "DESCR": "双机飞行",
+      "NOS": "2",
+      "MNOS": "2",
+      "DURN": "2.5",
+      "TFOUT": ".2",
+      "TFRET": ".2",
+      "MSUCPT": ".8"
+    }
+  ],
+  "MissionSystem": [
+    {
+      "MTID": "FLIGHT",
+      "SID": "AIRCRAFT"
+    }
+  ],
+  "Operations": [
+    {
+      "USTID": "FLEET",
+      "PRID": "DAILY"
+    }
+  ],
+  "OperationProfile": [
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "6"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "10"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "14"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "30"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "34"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "38"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "54"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "58"
+    },
+    {
+      "PRID": "DAILY",
+      "SPRID": "FLIGHT",
+      "STIM": "62"
+    }
+  ],
+  "SimLabFlightRule": [
+    {
+      "MTID": "FLIGHT",
+      "PREP_H": ".25",
+      "PREP_TASK": "CHANGE",
+      "DAILY_READY": "Y"
+    }
+  ],
+  "SimLabSupplyRoute": [
+    {
+      "ROUTEID": "REGION_BASE",
+      "IID": "POWER",
+      "FROM_STID": "REGION",
+      "TO_STID": "BASE",
+      "TRANSIT_H": ".5"
+    },
+    {
+      "ROUTEID": "CENTER_BASE",
+      "IID": "POWER",
+      "FROM_STID": "CENTER",
+      "TO_STID": "BASE",
+      "TRANSIT_H": "1.5"
+    },
+    {
+      "ROUTEID": "CENTER_REGION",
+      "IID": "POWER",
+      "FROM_STID": "CENTER",
+      "TO_STID": "REGION",
+      "TRANSIT_H": "1"
+    }
+  ],
+  "SimLabSupplyPolicy": [
+    {
+      "POINT": "BASELINE",
+      "STID": "BASE",
+      "IID": "POWER",
+      "TRIGGER": "PERIODIC",
+      "TARGET_QTY": "2",
+      "FIRST_H": "0",
+      "INTERVAL_H": "8"
+    },
+    {
+      "POINT": "BASELINE",
+      "STID": "REGION",
+      "IID": "POWER",
+      "TRIGGER": "PERIODIC",
+      "TARGET_QTY": "2",
+      "FIRST_H": "0",
+      "INTERVAL_H": "8"
+    }
+  ],
+  "SimLabRepairLocation": [
+    {
+      "IID": "POWER",
+      "FROM_STID": "BASE",
+      "REPAIR_STID": "CENTER"
+    },
+    {
+      "IID": "POWER",
+      "FROM_STID": "REGION",
+      "REPAIR_STID": "CENTER"
+    },
+    {
+      "IID": "POWER",
+      "FROM_STID": "CENTER",
+      "REPAIR_STID": "CENTER"
+    }
+  ],
+  "SimLabServiceRoute": [
+    {
+      "ROUTEID": "RETURN_BASE",
+      "IID": "POWER",
+      "FROM_STID": "BASE",
+      "TO_STID": "CENTER",
+      "TRANSIT_H": "1"
+    },
+    {
+      "ROUTEID": "RETURN_REGION",
+      "IID": "POWER",
+      "FROM_STID": "REGION",
+      "TO_STID": "CENTER",
+      "TRANSIT_H": "1"
+    }
+  ],
+  "SimLabMaintenanceRule": [
+    {
+      "RULEID": "POWER_CORRECTIVE",
+      "MID": "AIRCRAFT",
+      "IID": "POWER",
+      "STID": "BASE",
+      "KIND": "CORRECTIVE",
+      "METHOD": "MIXED",
+      "REPLACE_P": ".5"
+    },
+    {
+      "RULEID": "POWER_PREVENTIVE",
+      "MID": "AIRCRAFT",
+      "IID": "POWER",
+      "STID": "BASE",
+      "KIND": "PREVENTIVE",
+      "METHOD": "MIXED",
+      "REPLACE_P": ".6"
+    }
+  ],
+  "SimLabMaintenanceStep": [
+    {
+      "RULEID": "POWER_CORRECTIVE",
+      "STEP": "DIAGNOSE",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "RULEID": "POWER_CORRECTIVE",
+      "STEP": "IN_PLACE",
+      "DURATION_H": "1.5",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "RULEID": "POWER_CORRECTIVE",
+      "STEP": "REMOVE",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "CHANGE"
+    },
+    {
+      "RULEID": "POWER_CORRECTIVE",
+      "STEP": "INSTALL",
+      "DURATION_H": ".15",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "CHANGE"
+    },
+    {
+      "RULEID": "POWER_CORRECTIVE",
+      "STEP": "TEST",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "RULEID": "POWER_PREVENTIVE",
+      "STEP": "DIAGNOSE",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "RULEID": "POWER_PREVENTIVE",
+      "STEP": "IN_PLACE",
+      "DURATION_H": ".5",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "RULEID": "POWER_PREVENTIVE",
+      "STEP": "REMOVE",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "CHANGE"
+    },
+    {
+      "RULEID": "POWER_PREVENTIVE",
+      "STEP": "INSTALL",
+      "DURATION_H": ".15",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "CHANGE"
+    },
+    {
+      "RULEID": "POWER_PREVENTIVE",
+      "STEP": "TEST",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    }
+  ],
+  "SimLabOffItemService": [
+    {
+      "IID": "POWER",
+      "STID": "CENTER",
+      "KIND": "CORRECTIVE",
+      "STEP": "DIAGNOSE",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "IID": "POWER",
+      "STID": "CENTER",
+      "KIND": "CORRECTIVE",
+      "STEP": "SERVICE",
+      "DURATION_H": "1.5",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "IID": "POWER",
+      "STID": "CENTER",
+      "KIND": "CORRECTIVE",
+      "STEP": "TEST",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "IID": "POWER",
+      "STID": "CENTER",
+      "KIND": "PREVENTIVE",
+      "STEP": "DIAGNOSE",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "IID": "POWER",
+      "STID": "CENTER",
+      "KIND": "PREVENTIVE",
+      "STEP": "SERVICE",
+      "DURATION_H": ".5",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    },
+    {
+      "IID": "POWER",
+      "STID": "CENTER",
+      "KIND": "PREVENTIVE",
+      "STEP": "TEST",
+      "DURATION_H": ".1",
+      "DISTRIBUTION": "FIXED",
+      "TASK": "FIX"
+    }
+  ],
+  "SimLabItemPreventive": [
+    {
+      "PMID": "POWER_SERVICE",
+      "IID": "POWER",
+      "CLOCK": "OPERATING",
+      "INTERVAL_H": "3",
+      "INITIAL_H": "0"
+    }
+  ]
+}
