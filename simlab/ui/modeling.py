@@ -79,7 +79,6 @@ class ModelEditor(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(label('模型数据', 'PageTitle'))
-        outer.addWidget(label(f'当前支持的 {len(SUPPORTED)} 张建模表 · 中文显示', 'Muted'))
         splitter = QSplitter()
         outer.addWidget(splitter, 1)
         left = QWidget()
@@ -131,6 +130,11 @@ class ModelEditor(QWidget):
         self.info = QTextBrowser()
         self.info.setMinimumWidth(220)
         self.info.setMaximumWidth(300)
+        self.info.hide()
+        self.field_help_button = button("字段说明")
+        self.field_help_button.setCheckable(True)
+        self.field_help_button.toggled.connect(self.info.setVisible)
+        toolbar.addWidget(self.field_help_button)
         splitter.addWidget(self.info)
         splitter.setSizes([225, 800, 245])
         self.nodes = {}
@@ -189,6 +193,8 @@ class ModelEditor(QWidget):
         self.title.setText(table_label(name))
         self.count_label.setText(f'{len(rows)} 行 / {len(fields)} 字段')
         self.support_label.setText('双击编辑 · Ctrl+C / Ctrl+V 可与 Excel 交换 · 留空字段按字典默认值解释。' if name in SUPPORTED else '此表可编辑、保存和交换；本版引擎暂不支持计算，含数据时会阻止运行。')
+        self.grid.setToolTip(self.support_label.text())
+        self.support_label.setVisible(name not in SUPPORTED)
         self.loading = False
         self.tree.blockSignals(True)
         self.tree.setCurrentItem(self.nodes[name])

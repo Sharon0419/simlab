@@ -9,7 +9,7 @@ class StructureView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label('组成结构', 'PageTitle'))
-        layout.addWidget(label('只读类型结构 · 每母件数量；实际实物与位置见结果中的“部件实例”。在模型数据中编辑 MaterielStructure。', 'Muted', True))
+        self.setToolTip('只读类型结构；在模型数据中编辑组成关系。实物位置见结果的部件实例。')
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(['系统 / 部件', '类型', '每母件数量', '名称'])
         self.tree.setColumnWidth(0, 350)

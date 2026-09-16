@@ -430,6 +430,34 @@ def run(directory):
     output['checks']+=['aging input','aging worker','repair age updates','aging results and CSV','format9 roundtrip']
     from .m3_smoke import check_m3
     output['checks'] += check_m3(window, directory, failures)
+    window.nav.setCurrentRow(1)
+    assert window.editor.info.isHidden()
+    QTest.mouseClick(window.editor.field_help_button, Qt.LeftButton)
+    assert window.editor.info.isVisible() and window.editor.info.toPlainText()
+    QTest.mouseClick(window.editor.field_help_button, Qt.LeftButton)
+    window.editor.select_table('Item')
+    assert window.editor.info.isHidden() and window.editor.support_label.isHidden()
+    QTest.qWait(100)
+    window.grab().save(str(directory/'25-clean-model.png'))
+    window.nav.setCurrentRow(2)
+    assert window.calculation_notes.isHidden()
+    QTest.mouseClick(window.notes_button, Qt.LeftButton)
+    assert window.calculation_notes.isVisible()
+    QTest.mouseClick(window.notes_button, Qt.LeftButton)
+    window.validation_box.hide()
+    QTest.qWait(100)
+    window.grab().save(str(directory/'26-clean-experiment.png'))
+    control = window.project['tables']['Control'][0]
+    previous_horizon = control['SIMPE']
+    control['SIMPE'] = '-1'
+    try:
+        assert not window.check_model()
+        assert window.validation_box.isVisible() and window.validation_box.toPlainText()
+    finally:
+        control['SIMPE'] = previous_horizon
+    assert window.check_model()
+    output['checks'] += ['field help opens on demand', 'calculation help opens on demand',
+                         'validation errors remain visible']
     window.close()
     app.processEvents()
     sys.excepthook = previous_hook

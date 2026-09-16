@@ -120,7 +120,8 @@ class MainWindow(QMainWindow):
         self.nav.addItem('08   项目库')
         self.nav.currentRowChanged.connect(self.navigate)
         sl.addWidget(self.nav, 1)
-        bottom = label(f'●  本机运行 · 数据本地保存\n\nSIMLOX 2017 字段基线\nv{__version__}  /  独立开发', 'SidebarSub')
+        bottom = label(f'v{__version__}', 'SidebarSub')
+        bottom.setToolTip('本机运行 · 数据本地保存 · SIMLOX 2017 字段基线 · 独立开发')
         bottom.setContentsMargins(19, 0, 0, 0)
         sl.addWidget(bottom)
         root.addWidget(sidebar)
@@ -185,7 +186,6 @@ class MainWindow(QMainWindow):
         m3_actions.addWidget(self.m3_demo_button)
         m3_actions.addWidget(button('预览并迁移当前项目到 M3', self.migrate_m3))
         layout.addLayout(m3_actions)
-        layout.addWidget(label('从装备模型到保障能力，用可复现的实验比较你的方案。', 'Muted'))
         metrics = QHBoxLayout()
         self.overview_metrics = []
         for title, subtitle in [('部署设备', 'SystemDeployment · QTYPS'), ('部件类型', 'Item · IID'),
@@ -195,21 +195,6 @@ class MainWindow(QMainWindow):
             metrics.addWidget(metric)
         layout.addLayout(metrics)
         hero, hl = card()
-        h = QHBoxLayout()
-        h.addWidget(label('建模 → 校验 → 仿真 → 方案比较'))
-        h.addStretch()
-        h.addWidget(label('OFFLINE  /  本机版', 'Badge'))
-        hl.addLayout(h)
-        hl.addWidget(label('模型字段与本机 SIMLOX 2017 数据字典对齐。\n运行时采用独立开发的基础保障仿真引擎，每次实验都会记录输入快照、随机种子和统计结果。', 'Muted', True))
-        flow = QHBoxLayout()
-        for title, desc in [('01  装备与部件', 'System / Item\nMaterielStructure'),
-                            ('02  保障与资源', 'Station / StockAllocation\nItemRepair / TaskResource'),
-                            ('03  运行与比较', 'SystemDeployment / Control\n独立重复试验 / 结果追溯')]:
-            box, bl = card()
-            bl.addWidget(label(title))
-            bl.addWidget(label(desc, 'Muted'))
-            flow.addWidget(box)
-        hl.addLayout(flow)
         actions = QHBoxLayout()
         actions.addWidget(button('编辑模型数据', lambda: self.nav.setCurrentRow(1), True))
         actions.addWidget(button('配置仿真实验', lambda: self.nav.setCurrentRow(2)))
@@ -224,6 +209,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(recent, 1)
         self.path_label = label('', 'Muted', True)
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.path_label.hide()
+        details = button("项目详情")
+        details.setCheckable(True)
+        details.toggled.connect(self.path_label.setVisible)
+        layout.addWidget(details, 0, Qt.AlignLeft)
         layout.addWidget(self.path_label)
         self.pages.addWidget(page)
 
@@ -232,7 +222,6 @@ class MainWindow(QMainWindow):
         outer = QVBoxLayout(page)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(label('仿真实验', 'PageTitle'))
-        outer.addWidget(label('参数直接对应 Control 表。运行前冻结模型，计算在独立子进程完成。', 'Muted'))
         body = QHBoxLayout()
         config, cl = card()
         cl.addWidget(label('实验配置'))
@@ -242,20 +231,20 @@ class MainWindow(QMainWindow):
         form.addRow('实验名称', self.run_name)
         self.repetitions = QSpinBox()
         self.repetitions.setRange(1, 1000)
-        form.addRow('NREPS · 重复次数', self.repetitions)
+        form.addRow('重复次数', self.repetitions)
         self.horizon = QDoubleSpinBox()
         self.horizon.setRange(0.01, 876000)
         self.horizon.setDecimals(2)
         self.horizon.setSuffix(' 小时')
-        form.addRow('SIMPE · 仿真时长', self.horizon)
+        form.addRow('仿真时长', self.horizon)
         self.interval = QDoubleSpinBox()
         self.interval.setRange(0.01, 876000)
         self.interval.setSuffix(' 小时')
-        form.addRow('RCINT · 采样间隔', self.interval)
+        form.addRow('采样间隔', self.interval)
         self.seed = QLineEdit()
-        form.addRow('RSEED · 随机种子', self.seed)
+        form.addRow('随机种子', self.seed)
         self.point = QLineEdit()
-        form.addRow('APID · 配置方案', self.point)
+        form.addRow('配置方案', self.point)
         cl.addLayout(form)
         cl.addStretch()
         self.experiment_controls = [self.repetitions, self.horizon, self.interval, self.seed, self.point]
@@ -282,18 +271,24 @@ class MainWindow(QMainWindow):
         text = QTextBrowser()
         text.setHtml('''<p>支持 System→LRU→SRU 串联结构。基地整换 LRU，修理站检测、换修 SRU、测试后返库。</p>
         <p>故障率单位为每百万运行小时。系统按 UTIL 连续折算运行量，故障后暂停使用。</p>
-        <p>支持两级保障网络、部件拆装、修复返库、运输延迟及组合资源排队。</p>
+        <p>旧模式支持两级保障；M3支持三级显式供应、维修分流及叶件预防维修。支持运输延迟及组合资源排队。</p>
         <p>建模界面仅展示当前支持的表，按 01–07 建模流程排列。尚未接入的高级规则会在运行前指出并拦截。</p>
         <p><b>结果口径：</b>可用度按状态持续时间精确积分；曲线为各重复试验的采样均值。</p>
         <p>填写 Operations 后启用固定值守窗口：UTIL=1，待命和补位准备不累计运行故障；按优先级分配空闲设备，不抢占。SimLabDutyRule 可配置最低保障、补位时间和连续不达标容忍时间。</p>
         <p>资源班次按 ShiftProfile 显式时间窗执行：班内开始，允许跨班完成。任务满足率是设备小时供给比例，不等同原厂任务成功率。</p>
         <p>从项目概览“新建任务日历示例”开始；不支持原厂二进制 .sxi 文件直接导入。</p>''')
         nl.addWidget(text, 1)
+        self.calculation_notes = notes
+        notes.hide()
+        self.notes_button = button("计算说明")
+        self.notes_button.setCheckable(True)
+        self.notes_button.toggled.connect(notes.setVisible)
+        cl.addWidget(self.notes_button, 0, Qt.AlignLeft)
         body.addWidget(notes, 2)
         outer.addLayout(body, 1)
         self.validation_box = QTextBrowser()
         self.validation_box.setMaximumHeight(200)
-        self.validation_box.setPlainText('点击“校验模型”可检查字段、引用和本版计算支持范围。')
+        self.validation_box.hide()
         outer.addWidget(self.validation_box)
         self.pages.addWidget(page)
 
@@ -316,7 +311,7 @@ class MainWindow(QMainWindow):
         head.addWidget(self.maintenance_export_button)
         head.addWidget(button('从快照建立分支', self.branch_from_result))
         layout.addLayout(head)
-        self.result_meta = label('运行一个实验，查看可用度、停机原因与资源瓶颈。', 'Muted', True)
+        self.result_meta = label('暂无实验结果', 'Muted', True)
         layout.addWidget(self.result_meta)
         self.result_cards = []
         metrics = QHBoxLayout()
@@ -773,6 +768,7 @@ class MainWindow(QMainWindow):
             self.editor.select_table('Control')
         self.model_changed()
     def check_model(self):
+        self.validation_box.show()
         try:
             config = compile_model(self.project['tables'])
             self.validation_box.setHtml(f'<p style="color:#82d9b5">校验通过：{config["count"]} 台设备，{config["replications"]} 次重复试验。</p><p>字段、引用关系及当前计算范围均可接受。</p>')
@@ -903,9 +899,11 @@ class MainWindow(QMainWindow):
     def selected_run(self):
         return next((r for r in self.complete_runs if r['id'] == self.run_selector.currentData()), None)
     def show_result(self, *args):
+        self.mission_summary.setToolTip('')
+        self.age_notice.setToolTip('')
         self.age_instances.setRowCount(0)
         self.age_events.setRowCount(0)
-        self.age_notice.setText('本实验没有部件年龄结果；配置老化后重新运行。')
+        self.age_notice.setText('暂无部件年龄结果')
         self.inspection_clocks.setRowCount(0)
         self.inspection_jobs.setRowCount(0)
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
@@ -913,7 +911,8 @@ class MainWindow(QMainWindow):
         self.m3_service_page.set_run(run)
         if run and run['result'].get('aging'):
             aging = run['result']['aging']
-            self.age_notice.setText('显示首轮；年龄按运行小时累计，维修默认修复如新。' +
+            self.age_notice.setToolTip('年龄按实际运行小时累计；维修方式以模型配置为准。')
+            self.age_notice.setText('首轮部件年龄' +
                 (' 明细已截断，请缩小实验规模。' if aging['instances_truncated'] or aging['events_truncated'] else ''))
             fill_table(self.age_instances, [[r['part'],r['iid'],f"{r['age']:.6f}",f"{r['lifetime_hours']:.6f}",
                 '故障' if r['broken'] else '完好',
@@ -933,7 +932,7 @@ class MainWindow(QMainWindow):
             for metric in self.result_cards:
                 metric.number.setText('—')
             self.chart.set_samples([])
-            self.result_meta.setText('运行一个实验，查看可用度、停机原因与资源瓶颈。')
+            self.result_meta.setText('暂无实验结果')
             self.mission_chart.set_samples([])
             self.mission_summary.setText('本实验没有任务日历。')
             for table in (self.downtime_table, self.resource_table, self.events_table, self.mission_table, self.gap_table):
@@ -1041,8 +1040,18 @@ class MainWindow(QMainWindow):
                     f'{t["supplied"]} / {t["minimum"]}', '；'.join(f'{GAP_LABELS[k]}: {v}' for k, v in t['reasons'].items())] for t in mission.get('intervals', [])])
             fill_table(self.mission_table, [[t['id'], f'{t["start"]:g}', f'{t["end"]:g}', t['quantity'], f'{t["supplied_hours"]:.2f}', f'{t["gap_hours"]:.2f}', f'{t["full_window_rate"]:.1%}'] for t in mission['tasks']])
             fill_table(self.gap_table, [[GAP_LABELS[key], f'{v:.2f}'] for key, v in mission['gap_reasons'].items()])
+            self.mission_summary.setToolTip(self.mission_summary.text())
+            brief = f'小时满足率 {mission["fulfillment"]:.2%} · 缺口 {mission["gap_hours"]:.2f} 设备小时 · 95%区间 {interval}'
+            if flight and 'success_rate' in flight:
+                brief += f' · 任务成功率 {flight["success_rate"]:.2%}'
+            if not flight and 'minimum_rate' in mission:
+                brief += f' · 最低保障达标率 {mission["minimum_rate"]:.2%} · 窗口合格率 {mission["qualified_rate"]:.2%}'
+            brief += ' · 时段明细：首轮'
+            if mission.get('intervals_truncated'):
+                brief += '（已截断）'
+            self.mission_summary.setText(brief)
         else:
-            self.mission_summary.setText('本实验没有任务日历。旧版本实验仍可查看可用度与保障结果。')
+            self.mission_summary.setText('无任务日历结果')
             self.mission_table.setRowCount(0)
             self.gap_table.setRowCount(0)
         names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源或班次', 'replacement': '拆卸与安装作业', 'returning_failed':'故障返航（尚未落地）',

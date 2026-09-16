@@ -23,6 +23,7 @@ class M3ResultsPage(QWidget):
         layout.addLayout(controls)
         self.notice = QLabel()
         self.notice.setWordWrap(True)
+        self.notice.setToolTip('界面显示首轮；CSV导出全部轮次，含模型、种子和版本。')
         layout.addWidget(self.notice)
         self.summary = QLabel()
         self.summary.setWordWrap(True)
@@ -59,9 +60,9 @@ class M3ResultsPage(QWidget):
             self.notice.setText('本实验没有 M3 结果；请打开三级供应示例或配置 M3 模式后运行。')
             self.summary.clear()
             return
-        notice = f'首轮明细 · 本页 {len(rows)} 条。导出包含全部轮次及模型、种子、版本信息。'
+        notice = f'首轮明细 · {len(rows)} 条'
         if truncated(data, dataset):
-            notice += f' 明细已截断（总数 {detail_total(data, dataset)}）；请勿当作完整记录。'
+            notice += f' · 已截断（总数 {detail_total(data, dataset)}）'
         self.notice.setText(notice)
         totals = data.get('totals') or {}
         self.summary.setText('首轮汇总：' + '；'.join(

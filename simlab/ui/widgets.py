@@ -87,7 +87,8 @@ class Metric(QFrame):
         self.number = label('—', 'Metric')
         layout.addWidget(self.number)
         self.subtitle = label(subtitle, 'Muted', True)
-        layout.addWidget(self.subtitle)
+        self.subtitle.hide()
+        self.setToolTip(subtitle)
 
 class AvailabilityChart(QWidget):
     def __init__(self):

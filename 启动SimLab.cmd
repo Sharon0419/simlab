@@ -1,5 +1,9 @@
 @echo off
 cd /d "%~dp0"
+if exist "dist\SimLab-v0.10.1\SimLab.exe" (
+    start "" "%~dp0dist\SimLab-v0.10.1\SimLab.exe"
+    exit /b
+)
 if exist "dist\SimLab-v0.10.0\SimLab.exe" (
     start "" "%~dp0dist\SimLab-v0.10.0\SimLab.exe"
     exit /b
