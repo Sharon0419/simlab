@@ -277,3 +277,26 @@ def test_parent_replacement_moves_pending_leaf_pm_out_of_aircraft_lock():
     env.run(until=8.01)
     assert pm['station']=='A' and pm['status']=='completed'
     assert parts.records[child]['age']==0
+
+@pytest.mark.parametrize('reverse_structure', [False,True])
+@pytest.mark.parametrize('stocked_parent', [False,True])
+def test_simultaneous_leaf_preventive_jobs_arbitrate_by_rule_not_structure_order(reverse_structure,stocked_parent):
+    cfg=config(); cfg['horizon']=7
+    order=[('S1','Z_PM'),('S2','A_PM')]
+    if reverse_structure:order.reverse()
+    cfg['children']={'L':[dict(iid=iid,quantity=1,rate=0,envf=1) for iid,_ in order]}
+    if stocked_parent:cfg['stock']={('C','L'):1}
+    tables=cfg['m3']['tables']
+    for iid,rid in order:
+        add_rule(cfg,rid,'L',iid,'C','PREVENTIVE','IN_PLACE')
+        tables['SimLabItemPreventive'].append(dict(PMID=iid,IID=iid,CLOCK='CALENDAR',INTERVAL_H=2,INITIAL_H=0))
+    result=run_one(cfg)
+    parent_by_part={p['id']:p['parent'] for p in result['components']['instances']}
+    groups={}
+    for job in result['service']['jobs']:
+        groups.setdefault(parent_by_part[job['part']],[]).append(job)
+    assert len(groups)==(2 if stocked_parent else 1)
+    for jobs in groups.values():
+        actual=sorted(jobs,key=lambda j:j['started_at'])
+        assert [(j['rule'],j['due_at'],j['started_at'],j['ended_at']) for j in actual]==[
+            ('A_PM',2,2,5),('Z_PM',2,5,None)]

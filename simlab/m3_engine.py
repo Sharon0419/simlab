@@ -69,8 +69,11 @@ class Exposure:
         manager = self.service.manager
         if manager and getattr(manager, 'planned', None):
             manager.planned.register_due()
-        for part in self.clocks.due():
-            self.service.preventive(part)
+        due_parts = self.clocks.due()
+        if due_parts:
+            with self.service.registration_batch():
+                for part in due_parts:
+                    self.service.preventive(part)
 
     def run(self):
         while True:

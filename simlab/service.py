@@ -1,5 +1,6 @@
 """M3 service jobs, single-draw method selection and physical-tree ownership."""
 from collections import Counter
+from contextlib import contextmanager
 import heapq
 
 
@@ -21,6 +22,7 @@ class ServiceCoordinator:
         self.manager = self.clocks = self.runtime = None
         self.quarantined = set()
         self.reservations = {}
+        self._registration_depth = 0
         supply.eligible = self.eligible
         supply.on_stock = self.on_stock
 
@@ -111,6 +113,21 @@ class ServiceCoordinator:
     def priority(job):
         return (0 if job['kind'] == 'CORRECTIVE' else 1, job['due_at'], 2, job['rule'], job['id'])
 
+    @contextmanager
+    def registration_batch(self):
+        """Register one instant's work/quarantines before acquiring tree locks.
+
+        Stock callbacks may call advance synchronously during registration; the
+        same guard covers them and nested registrations. No SimPy yield occurs.
+        """
+        self._registration_depth += 1
+        try:
+            yield
+        finally:
+            self._registration_depth -= 1
+        if not self._registration_depth:
+            self.advance()
+
     def blocked(self, asset):
         return any(j['_asset'] is asset and j['ended_at'] is None and not j['_off'] for j in self.jobs)
 
@@ -146,6 +163,8 @@ class ServiceCoordinator:
         return True
 
     def advance(self):
+        if self._registration_depth:
+            return
         for job in sorted(self.jobs, key=self.priority):
             if job['status'] != 'queued' or not self.ready(job):
                 continue
