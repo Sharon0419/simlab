@@ -111,7 +111,10 @@ class PlannedMaintenance:
                     working = any(n['status'] == 'working' for n in workflow['nodes'])
                     job['status'] = 'working' if working else 'waiting'
                     phase = 'planned_maintenance' if working else 'planned_wait'
-                    self.set_state(asset, phase)
+                    # M3 state changes wake the exposure clock and dispatcher.
+                    # Re-reporting the same phase creates a zero-time wake loop.
+                    if asset['state'] != phase:
+                        self.set_state(asset, phase)
                     asset['flight_phase'] = phase
                 finished = workflow['status'] == 'completed' if workflow else (
                     job['status'] == 'working' and job['started_at']+job['duration'] <= self.env.now)

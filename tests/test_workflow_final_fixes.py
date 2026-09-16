@@ -154,3 +154,16 @@ def test_workflow_shift_and_resource_contention_partition_aircraft_hours():
     assert result['wait_shift_aircraft_hours'] == 2
     assert result['wait_resource_aircraft_hours'] == .5
     assert result['wait_aircraft_hours'] == 2.5 and result['work_aircraft_hours'] == 1
+
+
+def test_combined_m3_workflow_sample_does_not_livelock_dispatch():
+    import subprocess
+    import sys
+    script = ('from simlab.engine import simulate; '
+              'from simlab.workflow_sample import workflow_project; '
+              'result = simulate(workflow_project(1)["tables"]); '
+              'assert result["replication_results"]; print("completed")')
+    completed = subprocess.run([sys.executable, '-c', script], capture_output=True,
+                               text=True, timeout=10)
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == 'completed'
