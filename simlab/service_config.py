@@ -317,9 +317,10 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                             '缺少 CORRECTIVE 规则。'
                         )
 
-    # MINIMAL correction does not cover an already queued PM. If its parent can
-    # move while the child stays attached, the destination must execute every
-    # method that the source PM rule could already have selected.
+    # A queued PM can survive parent relocation in two ways: MINIMAL in-place
+    # correction leaves the failed child attached, or a different leaf fails and
+    # the healthy PM-bearing sibling moves with the parent. The destination must
+    # execute every method that the source PM rule could already have selected.
     minimal_items = {
         row['IID'] for row in canonical.get('SimLabItemAging', []) if row['REPAIR'] == 'MINIMAL'
     }
@@ -332,12 +333,16 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
             destination = locations.get((part['iid'], source))
             if not destination or destination == source:
                 continue
+            total_leaf_quantity = sum(child['quantity'] for child in children[part['iid']])
             for child in children[part['iid']]:
                 iid = child['iid']
-                if iid not in minimal_items:
-                    continue
                 child_corrective = corrective_rule(part['iid'], iid, destination)
-                if 'IN_PLACE' not in _draw_methods(child_corrective):
+                failed_leaf_survives = (
+                    iid in minimal_items and
+                    'IN_PLACE' in _draw_methods(child_corrective)
+                )
+                healthy_sibling_can_move = total_leaf_quantity > 1
+                if not failed_leaf_survives and not healthy_sibling_can_move:
                     continue
                 source_pm = rule_by_context.get((part['iid'], iid, source, 'PREVENTIVE'))
                 if source_pm is None:

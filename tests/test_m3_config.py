@@ -433,6 +433,20 @@ def test_pending_minimal_leaf_pm_method_is_compatible_after_parent_relocation():
     compile_model(tables)
 
 
+def test_pending_healthy_sibling_pm_is_checked_even_when_broken_leaf_repairs_perfectly():
+    tables = nested_pending_pm_tables()
+    tables["SimLabItemAging"][0]["REPAIR"] = "PERFECT"
+    # With one leaf, that leaf caused the parent replacement and PERFECT
+    # corrective work covers its queued PM before any destination rebind.
+    compile_model(tables)
+
+    next(row for row in tables["MaterielStructure"] if row["MID"] == "BOARD")["QTYPM"] = "2"
+    # With a sibling, a healthy leaf may already hold the incompatible queued PM
+    # while the other leaf triggers parent replacement.
+    with pytest.raises(ModelError, match="CHILD-PM-S.*DEPOT.*REPLACE"):
+        compile_model(tables)
+
+
 def test_service_resource_bundle_must_have_capacity_and_common_shift():
     tables = one_leaf_new_service_tables()
     tables["TaskResource"].append({"TID": "SERVICE", "RID": "BAY", "QTY": "1"})

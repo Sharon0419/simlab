@@ -37,3 +37,4 @@
 - `TARGET_QTY` 与 `REORDER_QTY` 现在都显式要求非负整数，临界值为负会在通用 schema 校验阶段拒绝。
 - 本轮 RED：新增边界测试首次运行结果为 `5 failed, 31 passed`。
 - GREEN：`.venv/Scripts/python.exe -m pytest tests/test_m3_config.py -q` → `36 passed in 0.32s`；配置、维修运行时和完整 M3 样例 → `61 passed in 1.55s`；迁移回归 → `8 passed in 0.14s`。按任务要求未重复运行完整测试集。
+- 最终复审补充健康兄弟场景：父总成只有一个 `PERFECT` 叶子时，其故障修复会覆盖该叶子的待办 PM，因此不要求跨站兼容；总成有两个及以上叶子时，健康兄弟可能携带待办 PM 随父件移动，所有源站可抽方式都必须在目的站可执行。新增测试先得到 `1 failed, 36 passed`，修复后配置测试 `37 passed`，配置与维修运行时聚焦回归 `61 passed in 0.66s`。
