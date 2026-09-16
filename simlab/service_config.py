@@ -92,6 +92,24 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
     errors = []
     rules = canonical['SimLabMaintenanceRule']
     retirement_items = {row['IID'] for row in canonical['SimLabItemRetirement']}
+    bindings = tables.get('SimLabWorkflowBinding', [])
+    def maintenance_bound(rule, method):
+        return any(r.get('ACTIVITY') == 'MAINTENANCE' and r.get('RULEID') == rule['RULEID']
+                   and r.get('METHOD') == method for r in bindings)
+
+    def off_bound(iid, station, kind):
+        return any(r.get('ACTIVITY') == 'OFF_ITEM' and r.get('IID') == iid
+                   and r.get('STID') == station and r.get('KIND') == kind for r in bindings)
+
+    path_steps = {'IN_PLACE': {'DIAGNOSE', 'IN_PLACE', 'TEST'},
+                  'REPLACE': {'DIAGNOSE', 'REMOVE', 'INSTALL', 'TEST'},
+                  'RETIREMENT': {'REMOVE', 'INSTALL', 'TEST'}}
+
+    def legacy_methods(rule):
+        methods = _executable_methods(rule)
+        if rule['IID'] in retirement_items and rule['KIND'] == 'CORRECTIVE':
+            methods.add('RETIREMENT')
+        return {m for m in methods if not maintenance_bound(rule, m)}
     rule_by_id = {row['RULEID']: row for row in rules}
     rule_by_context = {
         (row['MID'], row['IID'], row['STID'], row['KIND']): row for row in rules
@@ -139,7 +157,7 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
             errors.append(
                 f'SimLabMaintenanceStep 第 {index} 行.STEP: {rule["METHOD"]} 不使用此工序。'
             )
-        if row['TASK']:
+        if row['TASK'] and any(row['STEP'] in path_steps[m] for m in legacy_methods(rule)):
             errors.extend(_resource_errors(
                 'SimLabMaintenanceStep', index, rule['STID'], row['TASK'],
                 task_resources, capacity))
@@ -147,13 +165,10 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                 'SimLabMaintenanceStep', index, rule['STID'], row['TASK'],
                 task_resources, schedules, horizon))
 
-    required_by_method = {
-        'IN_PLACE': {'IN_PLACE', 'TEST'},
-        'REPLACE': {'REMOVE', 'INSTALL', 'TEST'},
-        'MIXED': {'IN_PLACE', 'REMOVE', 'INSTALL', 'TEST'},
-    }
     for index, rule in enumerate(rules, 1):
-        missing = required_by_method[rule['METHOD']] - steps_by_rule.get(rule['RULEID'], set())
+        required = set().union(*(path_steps[m] - {'DIAGNOSE'}
+                                for m in legacy_methods(rule) if m != 'RETIREMENT'))
+        missing = required - steps_by_rule.get(rule['RULEID'], set())
         if missing:
             errors.append(
                 f'SimLabMaintenanceRule 第 {index} 行 {rule["RULEID"]}: '
@@ -166,7 +181,7 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
             errors.append(f'SimLabOffItemService 第 {index} 行: 父项不允许配置 SERVICE；其子件分别维修。')
         key = row['IID'], row['STID'], row['KIND']
         off_steps.setdefault(key, set()).add(row['STEP'])
-        if row['TASK']:
+        if row['TASK'] and not off_bound(*key):
             errors.extend(_resource_errors(
                 'SimLabOffItemService', index, row['STID'], row['TASK'],
                 task_resources, capacity))
@@ -186,6 +201,8 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
             continue
         required = {'DIAGNOSE', 'TEST'} if rule['IID'] in children else {'DIAGNOSE', 'SERVICE', 'TEST'}
         configured = off_steps.get((rule['IID'], repair, rule['KIND']), set())
+        if off_bound(rule['IID'], repair, rule['KIND']):
+            configured = required
         if rule['IID'] in children and (repair, rule['IID']) in depot_processes:
             configured = configured | {'DIAGNOSE', 'TEST'}
         missing = required - configured
@@ -269,7 +286,7 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                     '库存或在途实物缺少显式维修地点映射。'
                 )
                 continue
-            missing = {'DIAGNOSE', 'SERVICE', 'TEST'} - off_steps.get(
+            missing = set() if off_bound(iid, repair, 'PREVENTIVE') else {'DIAGNOSE', 'SERVICE', 'TEST'} - off_steps.get(
                 (iid, repair, 'PREVENTIVE'), set())
             if missing:
                 errors.append(
@@ -348,7 +365,7 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                     continue
                 explicit = rule_by_context.get((mid, iid, station, 'CORRECTIVE'))
                 if explicit is not None:
-                    missing = {'REMOVE', 'INSTALL', 'TEST'} - steps_by_rule.get(explicit['RULEID'], set())
+                    missing = set() if maintenance_bound(explicit, 'RETIREMENT') else {'REMOVE', 'INSTALL', 'TEST'} - steps_by_rule.get(explicit['RULEID'], set())
                     if missing:
                         errors.append(
                             f'SimLabMaintenanceRule {explicit["RULEID"]}: '

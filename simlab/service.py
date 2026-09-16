@@ -6,11 +6,17 @@ from .retirement import Retirement
 
 
 class ServiceCoordinator:
-    def __init__(self, env, config, components, supply, pool, method_rng, work_rng, set_state, log):
+    def __init__(self, env, config, components, supply, pool, method_rng, work_rng, set_state, log, workflow_runner=None):
         self.env, self.config, self.parts, self.supply = env, config, components, supply
         self.pool, self.method_rng, self.work_rng = pool, method_rng, work_rng
         self.corrective_rng = self.replace_rng = work_rng
         self.set_state, self.log = set_state, log
+        self.workflows = workflow_runner
+        if self.workflows is None and config.get('workflows'):
+            import numpy as np
+            from .workflows import WorkflowExecutor
+            self.workflows = WorkflowExecutor(env, pool, config['workflows']['plans'],
+                np.random.default_rng(np.random.SeedSequence([0, 5, config.get('seed', 0)])))
         self.tables = config['m3']['tables']
         self.rules = {(r['MID'], r['IID'], r['STID'], r['KIND']): r
                       for r in self.tables.get('SimLabMaintenanceRule', [])}
@@ -331,17 +337,29 @@ class ServiceCoordinator:
             for pending in self.jobs:
                 if pending['status'] == 'queued' and self.root(pending['part']) == part:
                     pending['station'] = destination
-            yield from self.step(job, 'DIAGNOSE', off=True)
-            if record['children']:
-                yield from self.children(job)
+            from .service_workflows import plan_for, execute
+            plan = plan_for(self, job)
+            if plan:
+                yield from execute(self, job, plan)
             else:
-                yield from self.step(job, 'SERVICE', off=True)
-            yield from self.step(job, 'TEST', off=True)
-            if not record['children']:
-                self.finish_leaf(job)
+                yield from self.step(job, 'DIAGNOSE', off=True)
+                if record['children']:
+                    yield from self.children(job)
+                else:
+                    yield from self.step(job, 'SERVICE', off=True)
+                yield from self.step(job, 'TEST', off=True)
+                if not record['children']:
+                    self.finish_leaf(job)
             if not record.get('retired'):
                 self.supply.return_part(destination, part)
         else:
+            from .service_workflows import plan_for, execute
+            plan = plan_for(self, job)
+            if plan:
+                yield from execute(self, job, plan)
+                job.update(status='completed', ended_at=self.env.now)
+                self.log(job['asset'] or part, '维修工单完成', job['id'])
+                return
             if kind != 'RETIREMENT':
                 yield from self.step(job, 'DIAGNOSE')
             if job['method'] == 'IN_PLACE':
