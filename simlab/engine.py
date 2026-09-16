@@ -88,6 +88,9 @@ class ResourcePool:
         return False
 
 def run_one(config, replication=0, progress=None):
+    if config.get('m3'):
+        from .m3_engine import run_one as run_m3
+        return run_m3(config, replication, progress)
     env = simpy.Environment()
     failure_rng = np.random.default_rng(np.random.SeedSequence([replication, 0, config['seed']]))
     repair_rng = np.random.default_rng(np.random.SeedSequence([replication, 1, config['seed']]))
@@ -382,9 +385,10 @@ def simulate(tables, progress=None):
             mission['tasks'].append(task)
     if progress:
         progress(1.0)
-    return {**({'aging': results[0]['aging']} if config.get('aging') else {}),
+    result = {**({'aging': results[0]['aging']} if config.get('aging') or config.get('m3') else {}),
             'engine': __version__, 'created': now(), 'model_hash': model_hash(tables),
-            'maintenance': aggregate_maintenance(results) if config.get('children') else None,
+            'maintenance': aggregate_maintenance(results) if config.get('children') and not config.get('m3') else None,
+            **({'supply': results[0]['supply'], 'service': results[0]['service']} if config.get('m3') else {}),
             'components': results[0]['components'],
             'mission': mission,
             'versions': {'python': platform.python_version(), 'simpy': simpy.__version__, 'numpy': np.__version__},
@@ -404,3 +408,11 @@ def simulate(tables, progress=None):
                  '固定值守窗口；优先级分配、不抢占；故障退出、按规则准备补位；待命和准备不累计运行故障；最低保障按事件积分。' if mission else '连续使用率；无任务调度。') +
                 ('日历计划维修到期停派；在飞、故障维修及已有准备先完成；重复到期逐次排队，固定作业后重新准备，首波假设不跳过；计划资源等待与作业计入停机，不更换部件或重置故障时钟。' if config.get('planned') else '')+
                 ('飞行小时检查逐架累计实际在空时间，包含中止返航；空中到期继续任务，落地检查。每周期一张工单，检查完成本项计时归零；与日历维修串行，全部完成统一准备；初始小时按输入，不改变部件年龄与故障预算。' if any('flight_interval' in r for r in config.get('planned',[])) else '')}
+
+    if config.get('m3'):
+        result['assumptions'] = ('M3 显式三级供应与维修；有向补给、按时长候补和拆分；唯一订单及实物守恒，无运输容量限制。'
+            '修复性与预防性工单分别抽取一次原位/换件方式；送修采用显式有向最短路径，父子树串行锁定。'
+            '叶子实物日历/有效运行预防时钟独立；库存和在途日历到期隔离，预防完成修复如新并保留终身小时。'
+            '空中预防到期不单独中止；落地与整机计划维修、飞行检查共享串行地面队列，清空后统一准备。'
+            '资源组合原子申请，班内启动、跨班继续；期末未完订单和作业保留。供应与服务顶层明细取首轮，各轮明细另列。')
+    return result

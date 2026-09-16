@@ -86,6 +86,7 @@ class FlightManager(MissionManager):
         self.rebalance()
 
     def integrate(self):
+        if getattr(self, 'm3_service', None):self.m3_service.runtime.integrate()
         if self.planned:self.planned.inspections.integrate()
         if self.ground:self.ground.integrate()
         elapsed = self.env.now-self.last
@@ -162,13 +163,17 @@ class FlightManager(MissionManager):
                     t['phase']=phase
                 for a in members:
                     a['flight_phase']=phase
+        if getattr(self, 'm3_service', None):
+            if self.planned:self.planned.register_due()
+            self.m3_service.runtime.due()
         if self.planned:self.planned.advance()
+        if getattr(self, 'm3_service', None):self.m3_service.advance()
         for (pool, day), start in sorted(self.daily.items(), key=lambda x:x[1]):
             if start <= self.env.now and (self.pools[pool]['day'] is None or self.pools[pool]['day'] < day):
                 self.pools[pool]['day'] = day
                 for a in self.assets:
                     if self.pool_for(a)==pool and a['mission'] is None:
-                        if self.planned and (self.planned.blocked(a) or a.get('post_planned')):
+                        if (getattr(self, 'm3_service', None) and (self.m3_service.blocked(a) or a.get('post_planned'))) or (self.planned and (self.planned.blocked(a) or a.get('post_planned'))):
                             continue
                         ground_rule=self.pools[pool]['ground_rule']
                         if ground_rule is not None:
@@ -183,7 +188,7 @@ class FlightManager(MissionManager):
             pool = self.pool_for(a)
             if pool is None or a['mission'] is not None:
                 continue
-            if self.planned and self.planned.blocked(a):
+            if (getattr(self, 'm3_service', None) and self.m3_service.blocked(a)) or (self.planned and self.planned.blocked(a)):
                 continue
             if a['state'] != 'available':
                 a['flight_phase'] = 'maintenance'
@@ -202,7 +207,8 @@ class FlightManager(MissionManager):
                 continue
             candidates = sorted([a for a in self.assets if self.eligible(t,a) and a['state']=='available'
                                  and a['mission'] is None and a['flight_phase']=='ready'
-                                 and not (self.planned and self.planned.blocked(a))],
+                                 and not (self.planned and self.planned.blocked(a))
+                                 and not (getattr(self, 'm3_service', None) and self.m3_service.blocked(a))],
                                 key=lambda a:(a['sorties'],a['id']))
             if self.env.now != t['start'] or len(candidates)<t['quantity']:
                 t['flight_status'] = 'cancelled'
@@ -243,6 +249,7 @@ class FlightManager(MissionManager):
                     signal.succeed()
                 self.log(a['id'], '任务分配' if a['mission'] else '退出任务', a['mission'] or '')
         if self.planned:self.planned.inspections.arm()
+        if getattr(self, 'm3_service', None):self.m3_service.runtime.changed()
         self.supply, self.reasons = {}, {}
         for t in self.active:
             n = t['quantity'] if t['flight_status']=='launched' else 0

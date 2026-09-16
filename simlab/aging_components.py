@@ -32,13 +32,13 @@ class AgingComponents(Components):
                 if child is not None:
                     yield from self.leaves(child)
 
-    def age_event(self, record, event, before):
+    def age_event(self, record, event, before, repair=None):
         self.age_event_count += 1
         if len(self.age_events) < 10000:
             self.age_events.append(dict(time=self.env.now, part=record['id'], iid=record['iid'],
                 event=event, age_before=before, age_after=record['age'],
                 lifetime_hours=record['lifetime_hours'],
-                repair=self.rules.get(record['iid'], {}).get('repair', 'PERFECT')))
+                repair=repair or self.rules.get(record['iid'], {}).get('repair', 'PERFECT')))
 
     def fail(self, parent, leaf):
         super().fail(parent, leaf)
@@ -54,6 +54,20 @@ class AgingComponents(Components):
             if self.rules.get(record['iid'], {}).get('repair', 'PERFECT') == 'PERFECT':
                 record['age'] = 0.
             self.age_event(record, 'repair', before)
+
+    def service_complete(self, part, kind='CORRECTIVE'):
+        """Complete a leaf service without manufacturing a failure for healthy PM."""
+        record = self.records[part]
+        assert not record['children'], 'Service renewal applies to actual leaves only'
+        before = record['age']
+        perfect = kind == 'PREVENTIVE' or self.rules.get(record['iid'], {}).get('repair', 'PERFECT') == 'PERFECT'
+        record['broken'] = False
+        record['budget'] = None
+        if perfect:
+            record['age'] = 0.
+        self.age_event(record, 'preventive' if kind == 'PREVENTIVE' else 'repair', before,
+                       'PERFECT' if perfect else 'MINIMAL')
+        return perfect
 
     def settle(self, key):
         active = self.running.pop(key, None)

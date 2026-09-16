@@ -76,19 +76,25 @@ class PlannedMaintenance:
         yield event
         self.manager.rebalance()
 
-    def advance(self):
-        # Register due work synchronously before any launch, irrespective of event order.
+    def register_due(self):
+        """Register all clocks before M3 arbitrates the shared ground queue."""
         while self.cursor < len(self.schedule) and self.schedule[self.cursor][0] <= self.env.now:
             due, name, aid, rule, asset = self.schedule[self.cursor]
             self.cursor += 1
             self.enqueue(due,rule,asset)
         self.inspections.due()
+
+    def advance(self):
+        # Register due work synchronously before any launch, irrespective of event order.
+        self.register_due()
         changed = True
         while changed:
             changed = False
             for aid, queue in list(self.pending.items()):
                 if not queue:
                     continue
+                if getattr(self.manager, 'm3_service', None):
+                    queue.sort(key=lambda j: (j['status']=='deferred', j['due_at'], 1 if '_clock' in j else 0, j['rule']))
                 job, asset = queue[0], queue[0]['_asset']
                 if job['status'] == 'working' and job['started_at']+job['duration'] <= self.env.now:
                     job.update(status='completed', ended_at=self.env.now)
@@ -102,6 +108,9 @@ class PlannedMaintenance:
                     changed = True
                     continue
                 if job['status'] == 'deferred':
+                    service = getattr(self.manager, 'm3_service', None)
+                    if service and not service.planned_can_start(asset, job):
+                        continue
                     if asset['mission'] is not None or asset['state'] != 'available':
                         continue
                     ground = self.manager.ground
