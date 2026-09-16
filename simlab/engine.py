@@ -97,6 +97,11 @@ def run_one(config, replication=0, progress=None):
     repair_rng = np.random.default_rng(np.random.SeedSequence([replication, 1, config['seed']]))
     replace_rng = np.random.default_rng(np.random.SeedSequence([replication, 2, config['seed']]))
     pool = ResourcePool(env, config['capacity'], config.get('schedules'))
+    workflow_runner = None
+    if config.get('workflows'):
+        from .workflows import WorkflowExecutor
+        workflow_runner = WorkflowExecutor(env, pool, config['workflows']['plans'],
+            np.random.default_rng(np.random.SeedSequence([replication, 5, config['seed']])))
     mission_manager = None
     redundant_clock = None
     aging_enabled = bool(config.get('aging') or config.get('redundancy'))
@@ -294,6 +299,8 @@ def run_one(config, replication=0, progress=None):
         mission_manager = (manager_type(env, config['missions'], assets, log, resource_pool=pool,
                            planned_rules=config.get('planned', ()), set_state=planned_state)
                            if manager_type is FlightManager else manager_type(env, config['missions'], assets, log))
+        if workflow_runner:
+            mission_manager.workflow_runner = workflow_runner
         if redundant_clock:
             mission_manager.settle_faults = redundant_clock.settle_faults
             # Both assignment and completion wake the physical operating clock.
@@ -347,7 +354,8 @@ def run_one(config, replication=0, progress=None):
     instances = components.snapshot() if workshop else None
     if instances:
         assert instances['by_item'] == initial_by_item
-    return {**({'aging': components.age_snapshot()} if aging_enabled else {}),
+    return {**({'workflows': workflow_runner.snapshot()} if workflow_runner else {}),
+            **({'aging': components.age_snapshot()} if aging_enabled else {}),
             'availability': totals['available'] / denominator, 'failures': sum(failures.values()),
             'maintenance': workshop.snapshot() if workshop else None,
             'components': instances,
@@ -445,6 +453,7 @@ def simulate(tables, progress=None):
             'maintenance': aggregate_maintenance(results) if config.get('children') and not config.get('m3') else None,
             **({'supply': results[0]['supply'], 'service': results[0]['service']} if config.get('m3') else {}),
             'components': results[0]['components'],
+            **({'workflows': results[0]['workflows']} if config.get('workflows') else {}),
             'mission': mission,
             'versions': {'python': platform.python_version(), 'simpy': simpy.__version__, 'numpy': np.__version__},
             'seed': config['seed'], 'replications': len(results), 'horizon': config['horizon'],

@@ -185,6 +185,7 @@ class MainWindow(QMainWindow):
         m3_actions = QHBoxLayout()
         m3_actions.addWidget(self.m3_demo_button)
         m3_actions.addWidget(button('新建采购与报废示例', self.new_lifecycle_demo))
+        m3_actions.addWidget(button('新建冗余与多工序示例', self.new_workflow_demo))
         m3_actions.addWidget(button('预览并迁移当前项目到 M3', self.migrate_m3))
         layout.addLayout(m3_actions)
         metrics = QHBoxLayout()
@@ -396,8 +397,10 @@ class MainWindow(QMainWindow):
         self.m3_service_page = M3ResultsPage('service')
         tabs.addTab(self.m3_supply_page, '调运与采购')
         tabs.addTab(self.m3_service_page, '维修与寿命')
+        self.workflow_page = M3ResultsPage('workflows')
+        tabs.addTab(self.workflow_page, '保障多工序')
         tabs.currentChanged.connect(lambda index: self.chart_tabs.setVisible(tabs.widget(index) not in (
-            planned_page, inspection_page, aging_page, self.m3_supply_page, self.m3_service_page)))
+            planned_page, inspection_page, aging_page, self.m3_supply_page, self.m3_service_page, self.workflow_page)))
         layout.addWidget(tabs, 2)
         self.pages.addWidget(page)
 
@@ -610,6 +613,21 @@ class MainWindow(QMainWindow):
             self.editor.select_table('SimLabPurchasePolicy')
         except Exception as error:
             self.warn('创建采购与报废示例失败', str(error))
+
+    def new_workflow_demo(self):
+        if self.process is not None:
+            self.warn('计算仍在运行', '请先结束当前实验。')
+            return
+        if self.dirty and not self.save():
+            return
+        from ..workflow_sample import workflow_project
+        project = workflow_project()
+        try:
+            self.adopt_project(project, self.data_dir/'projects'/f'workflow-{project["id"][:12]}.sqlite')
+            self.nav.setCurrentRow(1)
+            self.editor.select_table('SimLabRedundancy')
+        except Exception as error:
+            self.warn('创建冗余与多工序示例失败', str(error))
 
     def new_layered_demo(self):
         if self.process is not None:
@@ -926,6 +944,7 @@ class MainWindow(QMainWindow):
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
         self.m3_supply_page.set_run(run)
         self.m3_service_page.set_run(run)
+        self.workflow_page.set_run(run)
         if run and run['result'].get('aging'):
             aging = run['result']['aging']
             self.age_notice.setToolTip('年龄按实际运行小时累计；维修方式以模型配置为准。')

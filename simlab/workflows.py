@@ -34,7 +34,8 @@ class WorkflowExecutor:
         for spec in nodes:
             job['nodes'].append(dict(spec=spec, step=spec['id'], name=spec['name'], action=spec['action'],
                 status='pending', ready_at=None, requested_at=None, started_at=None, ended_at=None,
-                resources=dict(spec['resources']), duration=None, _request=None))
+                resources=dict(spec['resources']), duration=None, _request=None, attempt=1,
+                attempt_created_at=self.env.now, history=[]))
         self.jobs.append(job)
         self.advance()
         return job
@@ -51,23 +52,35 @@ class WorkflowExecutor:
         elif hasattr(value, 'callbacks'):
             self.env.process(self._await_event(job, node, value, next_status))
         else:
-            self._hook_done(node, next_status)
+            self._hook_done(node, next_status, value)
 
-    def _hook_done(self, node, status):
+    def _hook_done(self, node, status, result=None):
+        if result == 'retry':
+            self._rows += 1
+            if self._rows > 200000:
+                raise RuntimeError('工序记录超过每轮200000条，仿真停止。')
+            previous = {k:v for k,v in node.items() if k != 'history'}
+            previous.update(status='retry', ended_at=self.env.now)
+            node['history'].append(previous)
+            node.update(status='pending', ready_at=None, requested_at=None, started_at=None,
+                        ended_at=None, duration=None, _request=None, attempt=node['attempt']+1,
+                        attempt_created_at=self.env.now)
+            node.pop('work_ended_at', None)
+            return
         node['status'] = status
         if status == 'completed':
             node['ended_at'] = self.env.now
 
     def _await_hook(self, job, node, generator, status):
-        yield from generator
+        result = yield from generator
         if job['status'] == 'running':
-            self._hook_done(node, status)
+            self._hook_done(node, status, result)
             self.advance()
 
     def _await_event(self, job, node, event, status):
-        yield event
+        result = yield event
         if job['status'] == 'running':
-            self._hook_done(node, status)
+            self._hook_done(node, status, result)
             self.advance()
 
     def advance(self):
@@ -142,17 +155,18 @@ class WorkflowExecutor:
             activities.append(dict(id=job['id'], plan=job['plan'], **job['context'],
                 started_at=job['created_at'], ended_at=job['ended_at'], status=job['status'],
                 elapsed_hours=end-job['created_at']))
-            for n in job['nodes']:
-                ready = n['ready_at'] if n['ready_at'] is not None else end
-                requested = n['requested_at'] if n['requested_at'] is not None else end
-                start = n['started_at'] if n['started_at'] is not None else end
+            for n in [attempt for node in job['nodes'] for attempt in node['history'] + [node]]:
+                node_end = n['ended_at'] if n['ended_at'] is not None else end
+                ready = n['ready_at'] if n['ready_at'] is not None else node_end
+                requested = n['requested_at'] if n['requested_at'] is not None else node_end
+                start = n['started_at'] if n['started_at'] is not None else node_end
                 shift = off_shift_hours(self.pool, job['context']['station'], n['resources'], requested, start)
                 work_end = n.get('work_ended_at', n['ended_at'] if n['ended_at'] is not None else end)
                 rows.append(dict(workflow=job['id'], plan=job['plan'], **job['context'],
-                    **{k:n[k] for k in ('step','name','action','status','ready_at','requested_at','started_at','ended_at','resources','duration')},
+                    **{k:n[k] for k in ('step','name','action','status','ready_at','requested_at','started_at','ended_at','resources','duration','attempt')},
                     predecessors=list(n['spec']['predecessors']),
                     successors=[s['step'] for s in job['nodes'] if n['step'] in s['spec']['predecessors']],
-                    wait_dependency_hours=ready-job['created_at'],
+                    wait_dependency_hours=ready-n['attempt_created_at'],
                     wait_prerequisite_hours=requested-ready,
                     wait_shift_hours=shift, wait_resource_hours=max(0., start-requested-shift),
                     work_hours=max(0., work_end-start) if n['started_at'] is not None else 0.))

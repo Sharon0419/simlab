@@ -207,6 +207,10 @@ def run_one(config, replication=0, progress=None):
     service = ServiceCoordinator(env, config, parts, supply, pool, rngs[3], rngs[4], state, log)
     service.corrective_rng, service.replace_rng = rngs[1], rngs[2]
     service.assets = assets
+    if config.get('workflows'):
+        from .workflows import WorkflowExecutor
+        service.workflows = WorkflowExecutor(env, pool, config['workflows']['plans'],
+            np.random.default_rng(np.random.SeedSequence([replication, 5, config['seed']])))
 
     def failed(asset, slot, leaf):
         parts.fail(slot['token'], leaf)
@@ -237,6 +241,8 @@ def run_one(config, replication=0, progress=None):
             manager = M3Missions(env, config['missions'], assets, log)
             manager.runtime, manager.service = runtime, service
         service.manager = manager
+        if config.get('workflows'):
+            manager.workflow_runner = service.workflows
         if config.get('redundancy'):
             manager.settle_faults = runtime.settle_faults
     initial = len(parts.records)
@@ -276,7 +282,8 @@ def run_one(config, replication=0, progress=None):
     parts.validate(installed, stocked)
     assert Counter(initial_by_item) + supply.created_counts == Counter(r['iid'] for r in parts.records.values())
     pool.update()
-    return dict(aging=parts.age_snapshot(), supply=supply.snapshot(), service=service.snapshot(),
+    return dict(**({'workflows': service.workflows.snapshot()} if config.get('workflows') else {}),
+                aging=parts.age_snapshot(), supply=supply.snapshot(), service=service.snapshot(),
         availability=totals['available']/denominator, failures=sum(failures.values()), maintenance=None,
         components=parts.snapshot(), mission=manager.finish() if manager else None,
         downtime={s:totals[s]/len(assets) for s in STATES if s!='available'}, samples=samples,

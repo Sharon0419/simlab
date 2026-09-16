@@ -4,12 +4,19 @@ import json
 
 
 DATASETS = {
+    'workflows': {'activities': '保障活动', 'steps': '工序执行明细'},
     'supply': {'orders': '补货申请', 'shipments': '调运批次', 'purchases': '外部采购',
                'stocks': '期末库存', 'demands': '取件需求'},
     'service': {'jobs': '维修工单', 'clocks': '部件预防计时',
                 'retirements': '报废记录', 'lifetimes': '实物寿命台账'},
 }
 LABELS = {
+    'workflow': '流程实例', 'plan': '工序方案', 'activity': '活动类型', 'step': '工序',
+    'name': '名称', 'action': '业务动作', 'ready_at': '紧前完成时刻/h',
+    'requested_at': '申请资源时刻/h', 'resources': '资源需求', 'duration': '抽取作业时长/h',
+    'predecessors': '紧前工序', 'successors': '紧后工序', 'elapsed_hours': '活动历时/h',
+    'wait_dependency_hours': '等待紧前/h', 'wait_prerequisite_hours': '等待业务条件/h',
+    'wait_shift_hours': '等待班次/h', 'wait_resource_hours': '等待资源/h', 'work_hours': '实际作业/h',
     'id': '编号', 'sequence': '先后序号', 'station': '站点', 'iid': '部件', 'created': '申请时刻/h',
     'quantity': '数量', 'unallocated': '待分配', 'in_transit': '在途', 'received': '已收货',
     'sponsor': '缺口记账来源', 'reason': '触发原因', 'order': '申请编号', 'route': '调运策略',
@@ -36,6 +43,10 @@ LABELS = {
     'age': '有效年龄/h',
 }
 VALUES = {
+    'MAINTENANCE': '在位维修', 'PREPARATION': '出动准备', 'INSPECTION': '飞行小时检查',
+    'CUSTOM': '自定义作业', 'DIAGNOSE': '检测', 'REMOVE': '拆卸', 'INSTALL': '安装',
+    'SERVICE': '实际维修', 'TEST': '测试', 'running': '进行中', 'waiting': '等待资源或班次',
+    'prerequisite': '等待业务条件', 'finalizing': '业务处理中', 'cancelled': '已取消', 'ready': '已就绪',
     'CORRECTIVE': '修复性维修', 'PREVENTIVE': '预防性维修',
     'IN_PLACE': '原位维修', 'REPLACE': '换件维修', 'MIXED': '按比例选择', 'OFF_ITEM': '拆下件维修',
     'OPERATING': '有效运行小时', 'CALENDAR': '日历小时',

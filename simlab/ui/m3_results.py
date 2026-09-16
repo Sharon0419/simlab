@@ -57,7 +57,8 @@ class M3ResultsPage(QWidget):
                 self.table.setItem(i, j, QTableWidgetItem(display(row.get(key))))
         self.export_button.setEnabled(bool(data))
         if not data:
-            self.notice.setText('本实验没有 M3 结果；请打开三级供应示例或配置 M3 模式后运行。')
+            self.notice.setText('本实验没有工序结果；配置工序方案后运行。' if self.section == 'workflows' else
+                               '本实验没有 M3 结果；请打开三级供应示例或配置 M3 模式后运行。')
             self.summary.clear()
             return
         notice = f'首轮明细 · {len(rows)} 条'
@@ -65,7 +66,10 @@ class M3ResultsPage(QWidget):
             notice += f' · 已截断（总数 {detail_total(data, dataset)}）'
         self.notice.setText(notice)
         totals = data.get('totals') or {}
-        if dataset == 'purchases':
+        if self.section == 'workflows':
+            self.summary.setText(f"已完成 {sum(r.get('status') == 'completed' for r in rows)} · "
+                                 f"未完成 {sum(r.get('status') not in ('completed','cancelled') for r in rows)}")
+        elif dataset == 'purchases':
             self.summary.setText(f"采购 {totals.get('purchase_count', 0)} 批 · "
                                  f"订购 {totals.get('purchased', 0)} 件 · "
                                  f"已到货 {totals.get('purchase_received', 0)} 件")

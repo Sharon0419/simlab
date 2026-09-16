@@ -430,6 +430,8 @@ def run(directory):
     output['checks']+=['aging input','aging worker','repair age updates','aging results and CSV','format9 roundtrip']
     from .m3_smoke import check_m3
     output['checks'] += check_m3(window, directory, failures)
+    from .workflow_smoke import check_workflows
+    output['checks'] += check_workflows(window, directory, failures)
     window.nav.setCurrentRow(1)
     assert window.editor.info.isHidden()
     QTest.mouseClick(window.editor.field_help_button, Qt.LeftButton)

@@ -6,6 +6,9 @@ from .extensions import TABLES as EXTENSION_TABLES
 SCHEMA = json.loads((Path(__file__).parent / 'data' / 'schema.json').read_text(encoding='utf-8'))
 TABLES = {**SCHEMA['tables'], **EXTENSION_TABLES}
 TABLE_LABELS = {
+    'SimLabRedundancy': '最低可用数量',
+    'SimLabWorkflow': '保障工序方案', 'SimLabWorkflowStep': '方案工序与依赖',
+    'SimLabWorkflowBinding': '保障活动方案绑定',
     'SimLabExecution': '执行模式',
     'SimLabSupplyRoute': '补给路线', 'SimLabSupplyPolicy': '库存补货策略',
     'SimLabPurchasePolicy': '外部采购策略', 'SimLabItemRetirement': '部件寿命报废',
@@ -41,6 +44,9 @@ TABLE_LABELS = {
     'IntegerDistributions': '整数分布', 'UnitGroup': '使用单位组', 'MaintenanceAllocation': '维修配置',
 }
 FIELD_LABELS = {
+    'PARENT': '直接上级', 'K': '最低可用数量', 'WFID': '工序方案标识',
+    'STEPID': '工序标识', 'NAME': '名称', 'ACTION': '业务动作',
+    'PREDECESSORS': '紧前工序', 'BINDID': '绑定标识', 'ACTIVITY': '活动类型',
     'MODE': '执行模式', 'ROUTEID': '路线标识', 'FROM_STID': '起点站点',
     'TO_STID': '终点站点', 'TRANSIT_H': '运输时长', 'TRIGGER': '触发方式',
     'TARGET_QTY': '目标库存位置', 'REORDER_QTY': '临界库存位置',
@@ -131,11 +137,12 @@ def value(table, row, column, fallback=''):
 
 # Workflow order applies to navigation only; the original dictionary is unchanged.
 MODELING_GROUPS = {
-    '01  装备组成': ('System', 'Item', 'MaterielStructure', 'SimLabItemAging', 'SimLabItemRetirement', 'SimLabItemPreventive'),
+    '01  装备组成': ('System', 'Item', 'MaterielStructure', 'SimLabRedundancy', 'SimLabItemAging', 'SimLabItemRetirement', 'SimLabItemPreventive'),
     '02  站点与部署': ('Station', 'StationStructure', 'Unit', 'SystemDeployment'),
     '03  资源与班次': ('Resource', 'Shift', 'ShiftProfile', 'ResourceStationData', 'ResourceAllocation'),
     '04  维修与保障作业': ('Tasks', 'TaskResource', 'ItemRepair', 'ItemReplacement', 'SimLabDepotProcess', 'SimLabMaintenanceRule', 'SimLabMaintenanceStep', 'SimLabOffItemService', 'SimLabRepairLocation', 'SimLabServiceRoute', 'SimLabPlannedMaintenance', 'SimLabFlightInspection', 'SimLabInspectionInitial'),
     '05  备件与供应': ('StockAllocation', 'SimLabSupplyRoute', 'SimLabSupplyPolicy', 'SimLabPurchasePolicy'),
     '06  任务与运行': ('MissionType', 'MissionSystem', 'OperationProfile', 'Operations', 'SimLabDutyRule', 'SimLabFlightRule'),
     '07  仿真控制': ('Control', 'SimLabExecution'),
+    '08  保障多工序': ('SimLabWorkflow', 'SimLabWorkflowStep', 'SimLabWorkflowBinding'),
 }

@@ -2,6 +2,7 @@
 import math
 import re
 from .operations import _check_common
+from .schema import value
 
 ACTIVITIES = ('MAINTENANCE', 'OFF_ITEM', 'PREPARATION', 'CALENDAR', 'INSPECTION')
 ACTIONS = ('CUSTOM', 'DIAGNOSE', 'REMOVE', 'INSTALL', 'IN_PLACE', 'SERVICE', 'TEST')
@@ -59,8 +60,8 @@ def compile_workflows(tables, config):
         task = row.get('TASK', '')
         if task and task not in tasks:
             errors.append(f'SimLabWorkflowStep.{name}/{step}: 资源任务不存在。')
-        resources = {r['RID']: int(float(r['QTY'])) for r in tables.get('TaskResource', [])
-                     if task and r['TID'] == task and float(r['QTY']) > 0}
+        resources = {r['RID']: int(float(value('TaskResource', r, 'QTY'))) for r in tables.get('TaskResource', [])
+                     if task and r['TID'] == task and float(value('TaskResource', r, 'QTY')) > 0}
         if task and not resources:
             errors.append(f'SimLabWorkflowStep.{name}/{step}: 资源任务需要正数量需求。')
         action = row.get('ACTION', '') or 'CUSTOM'
@@ -109,6 +110,10 @@ def compile_workflows(tables, config):
                 continue
             if not config.get('m3'):
                 errors.append(f'{prefix}: 拆下件工序方案须启用M3执行模式。')
+            reachable = any(r['IID'] == iid and r['REPAIR_STID'] == station
+                            for r in tables.get('SimLabRepairLocation', []))
+            if not reachable:
+                errors.append(f'{prefix}: 必须绑定该部件已配置的维修目的地。')
             stations = [station]
             order = ['DIAGNOSE', 'SERVICE', 'TEST']
             required = set(order)
@@ -158,3 +163,24 @@ def compile_workflows(tables, config):
 
 def bound_plan(config, activity, rule='', method='', iid='', station='', kind=''):
     return config.get('workflows', {}).get('bindings', {}).get((activity, rule, method, iid, station, kind))
+
+
+def bind_flight_activities(config):
+    """Attach selected plans to existing preparation/check rule instances."""
+    errors, pools = [], {}
+    for mission in config['missions']:
+        plan = bound_plan(config, 'PREPARATION', mission['type'])
+        pool = mission['location'], mission['sid']
+        pools.setdefault(pool, set()).add(plan)
+        if plan:
+            mission['ground_rule'] = dict(mission.get('ground_rule') or
+                dict(task='', resources={}, daily_ready=False), workflow_plan=plan)
+    for pool, plans in pools.items():
+        if len(plans) > 1:
+            errors.append(f'SimLabWorkflowBinding.{pool}: 同一选机池须使用相同出动准备工序方案。')
+    for rule in config.get('planned', []):
+        activity = 'INSPECTION' if 'flight_interval' in rule else 'CALENDAR'
+        plan = bound_plan(config, activity, rule['id'])
+        if plan:
+            rule['workflow_plan'] = plan
+    return errors

@@ -124,3 +124,45 @@ def test_prerequisite_wait_does_not_hold_resources():
     env.run(until=job['event'])
     assert env.now == 4
     assert runner.snapshot()['steps'][0]['wait_prerequisite_hours'] == 3
+
+
+def test_workflow_task_uses_default_resource_quantity():
+    from simlab.compiler import compile_model
+    tables = workflow_tables()
+    tables['SimLabWorkflowStep'][0]['TASK'] = 'REPLACE'
+    for row in tables['TaskResource']:
+        if row['TID'] == 'REPLACE':
+            row.pop('QTY', None)
+    cfg = compile_model(tables)
+    assert all(q == 1 for q in cfg['workflows']['plans']['P'][0]['resources'].values())
+
+
+def test_off_item_binding_requires_reachable_service_context():
+    from simlab.compiler import compile_model, ModelError
+    tables = workflow_tables()
+    for row, action in zip(tables['SimLabWorkflowStep'], ['DIAGNOSE','SERVICE','TEST']):
+        row['ACTION'] = action
+    tables['SimLabWorkflowBinding'] = [dict(BINDID='B', WFID='P', ACTIVITY='OFF_ITEM',
+        IID='POWER', STID='REGIONAL', KIND='PREVENTIVE')]
+    with pytest.raises(ModelError, match='维修目的地'):
+        compile_model(tables)
+
+
+def test_rejected_install_retries_without_releasing_successors():
+    env = simpy.Environment()
+    pool = ResourcePool(env, {('S','R'): 1})
+    nodes = graph()[:2]
+    nodes[0].update(action='INSTALL', resources={'R': 1})
+    runner = WorkflowExecutor(env, pool, {'P': nodes}, np.random.default_rng(1))
+    calls = []
+    def after(action, node):
+        calls.append((action, env.now))
+        if action == 'INSTALL' and node['attempt'] == 1:
+            return 'retry'
+    job = runner.start('P', dict(activity='TEST', owner='J', station='S'), after=after)
+    env.run(until=job['event'])
+    assert env.now == 4
+    rows = runner.snapshot()['steps']
+    assert [r['status'] for r in rows] == ['retry','completed','completed']
+    assert rows[2]['started_at'] == 2
+    assert pool.free == pool.capacity

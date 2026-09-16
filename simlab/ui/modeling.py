@@ -1,6 +1,7 @@
 import csv
 import html
 import io
+import re
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence
@@ -107,6 +108,8 @@ class ModelEditor(QWidget):
         toolbar = QHBoxLayout()
         toolbar.addWidget(button('＋ 添加行', self.add_row))
         toolbar.addWidget(button('删除选中行', self.delete_rows))
+        self.successors_button = button('查看紧前 / 紧后', self.show_dependencies)
+        toolbar.addWidget(self.successors_button)
         toolbar.addStretch()
         toolbar.addWidget(button('导入 CSV', self.import_csv))
         toolbar.addWidget(button('导出 CSV', self.export_csv))
@@ -161,11 +164,29 @@ class ModelEditor(QWidget):
         for i in range(self.tree.topLevelItemCount()):
             group = self.tree.topLevelItem(i)
             group.setHidden(all(group.child(j).isHidden() for j in range(group.childCount())))
+    def show_dependencies(self):
+        if not self.project:
+            return
+        rows = self.project['tables'].get('SimLabWorkflowStep', [])
+        selected = self.grid.currentRow()
+        if self.current_table == 'SimLabWorkflowStep' and 0 <= selected < len(rows):
+            plan = rows[selected].get('WFID')
+            rows = [r for r in rows if r.get('WFID') == plan]
+        lines = []
+        for row in rows:
+            predecessors = [p for p in re.split(r'[,，;；\s]+', row.get('PREDECESSORS', '')) if p]
+            successors = [r.get('STEPID', '') for r in rows if r.get('WFID') == row.get('WFID')
+                          and row.get('STEPID') in re.split(r'[,，;；\s]+', r.get('PREDECESSORS', ''))]
+            lines.append(f"{row.get('WFID', '')} / {row.get('NAME') or row.get('STEPID', '')}："
+                         f"紧前 {', '.join(predecessors) or '无'}；紧后 {', '.join(successors) or '无'}")
+        QMessageBox.information(self, '工序依赖', '\n'.join(lines) or '尚未配置工序。')
+
     def tree_selected(self):
         nodes = self.tree.selectedItems()
         if nodes and nodes[0].data(0, Qt.UserRole):
             self.select_table(nodes[0].data(0, Qt.UserRole))
     def select_table(self, name):
+        self.successors_button.setVisible(name == 'SimLabWorkflowStep')
         self.current_table = name
         if not self.project:
             return

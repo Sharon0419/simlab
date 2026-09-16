@@ -11,7 +11,7 @@ class StructureView(QWidget):
         layout.addWidget(label('组成结构', 'PageTitle'))
         self.setToolTip('只读类型结构；在模型数据中编辑组成关系。实物位置见结果的部件实例。')
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(['系统 / 部件', '类型', '每母件数量', '名称'])
+        self.tree.setHeaderLabels(['系统 / 部件', '类型', '每母件数量', '最低可用数量', '名称'])
         self.tree.setColumnWidth(0, 350)
         self.tree.setColumnWidth(1, 100)
         self.tree.setColumnWidth(2, 130)
@@ -20,6 +20,8 @@ class StructureView(QWidget):
     def set_project(self, project):
         self.tree.clear()
         tables = project['tables']
+        thresholds = {(r.get('PARENT'), r.get('IID')): str(r.get('K', ''))
+                      for r in tables.get('SimLabRedundancy', [])}
         items = {r.get('IID'): r for r in tables.get('Item', [])}
         edges = {}
         for row in tables.get('MaterielStructure', []):
@@ -34,7 +36,9 @@ class StructureView(QWidget):
                 count += 1
                 iid = row.get('MID', '')
                 item = items.get(iid, {})
-                child = QTreeWidgetItem(node, [iid, item.get('TYPE', 'LRU'), str(row.get('QTYPM', '1')), item.get('DESCR', '')])
+                quantity = str(row.get('QTYPM', '1'))
+                child = QTreeWidgetItem(node, [iid, item.get('TYPE', 'LRU'), quantity,
+                    thresholds.get((parent, iid), quantity), item.get('DESCR', '')])
                 if iid in seen or depth >= 2:
                     if edges.get(iid):
                         QTreeWidgetItem(child, ['循环或超过两层部件，请校验模型'])
@@ -42,6 +46,6 @@ class StructureView(QWidget):
                     descend(child, iid, seen | {iid}, depth+1)
         for system in tables.get('System', []):
             sid = system.get('SID', '')
-            root = QTreeWidgetItem(self.tree, [sid, 'System', '—', system.get('DESCR', '')])
+            root = QTreeWidgetItem(self.tree, [sid, 'System', '—', '—', system.get('DESCR', '')])
             descend(root, sid, {sid}, 1)
         self.tree.expandAll()

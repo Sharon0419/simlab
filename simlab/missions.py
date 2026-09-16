@@ -63,10 +63,11 @@ class MissionManager:
     def rebalance(self):
         if getattr(self, '_settling_dispatch', False):
             return
-        if getattr(self, 'settle_faults', None) and not getattr(self, '_dispatching', False):
+        deferred_dispatch = bool(getattr(self, 'settle_faults', None) or getattr(self, 'workflow_runner', None))
+        if deferred_dispatch and not getattr(self, '_dispatching', False):
             self.queue_dispatch()
             return
-        self._settling_dispatch = bool(getattr(self, 'settle_faults', None))
+        self._settling_dispatch = deferred_dispatch
         try:
             self._rebalance()
         finally:

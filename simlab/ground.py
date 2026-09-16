@@ -31,6 +31,18 @@ class PreparationManager:
 
     def request(self,asset,rule,duration):
         assert asset['id'] not in self.active
+        if rule.get('workflow_plan'):
+            job = dict(id=len(self.jobs)+1, asset=asset['id'], station=asset['home'], task=rule['task'],
+                resources={}, duration=duration, requested_at=self.env.now, started_at=None,
+                ended_at=None, status='waiting', _asset=asset)
+            self.jobs.append(job)
+            self.active[asset['id']] = job
+            asset['flight_phase'] = 'waiting_preparation'
+            job['_workflow'] = self.manager.workflow_runner.start(rule['workflow_plan'],
+                dict(activity='PREPARATION', owner=str(job['id']), station=asset['home'], asset=asset['id']),
+                on_change=lambda _: self.manager.queue_dispatch())
+            self.advance()
+            return
         event=self.resources.request(asset['home'],rule['resources'])
         job=dict(id=len(self.jobs)+1,asset=asset['id'],station=asset['home'],task=rule['task'],
                  resources=dict(rule['resources']),duration=duration,requested_at=self.env.now,
@@ -56,6 +68,18 @@ class PreparationManager:
         while changed:
             changed=False
             for job in list(self.active.values()):
+                if '_workflow' in job:
+                    self.manager.workflow_runner.advance()
+                    work = job['_workflow']
+                    starts = [n['started_at'] for n in work['nodes'] if n['started_at'] is not None]
+                    if starts and job['started_at'] is None:
+                        job.update(status='working', started_at=min(starts))
+                        job['_asset']['flight_phase'] = 'preparing'
+                    if work['status'] == 'completed':
+                        job['duration'] = self.env.now-job['started_at']
+                        self.finish(job, 'completed')
+                        changed = True
+                    continue
                 if job['status']=='working' and job['started_at']+job['duration']<=self.env.now:
                     self.finish(job,'completed');changed=True
                 elif job['status']=='waiting' and job['_event'].triggered:
@@ -69,7 +93,10 @@ class PreparationManager:
         previous=job['status']
         job['status']=status;job['ended_at']=self.env.now
         del self.active[job['asset']]
-        if previous=='working' or job['_event'].triggered:
+        if '_workflow' in job:
+            if status != 'completed':
+                self.manager.workflow_runner.cancel(job['_workflow'])
+        elif previous=='working' or job['_event'].triggered:
             self.resources.release(job['station'],job['resources'])
         else:
             assert self.resources.cancel(job['_event'])

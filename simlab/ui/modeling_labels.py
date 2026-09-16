@@ -3,6 +3,8 @@ from ..schema import TABLES, table_label, field_label
 from ..validation import choices
 
 VALUE_LABELS = {
+    'CUSTOM': '自定义作业', 'MAINTENANCE': '在位维修', 'OFF_ITEM': '拆下件维修',
+    'PREPARATION': '出动准备', 'INSPECTION': '飞行小时检查', 'RETIREMENT': '到限换件',
     'M3': '三级供应与维修方式', 'THRESHOLD': '临界库存触发', 'PERIODIC': '指定周期触发',
     'EXPONENTIAL': '指数分布',
     'CORRECTIVE': '修复性维修', 'PREVENTIVE': '预防性维修',

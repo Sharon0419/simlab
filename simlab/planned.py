@@ -65,6 +65,8 @@ class PlannedMaintenance:
                    due_at=due, requested_at=None, started_at=None, ended_at=None,
                    status='deferred', _asset=asset)
         self.jobs.append(job)
+        if rule.get('workflow_plan'):
+            job['_workflow_plan'] = rule['workflow_plan']
         self.pending.setdefault(asset['id'], []).append(job)
         self.manager.log(asset['id'], '计划维修到期', rule['id'])
         return job
@@ -96,12 +98,25 @@ class PlannedMaintenance:
                 if getattr(self.manager, 'm3_service', None):
                     queue.sort(key=lambda j: (j['status']=='deferred', j['due_at'], 1 if '_clock' in j else 0, j['rule']))
                 job, asset = queue[0], queue[0]['_asset']
-                if job['status'] == 'working' and job['started_at']+job['duration'] <= self.env.now:
+                workflow = job.get('_workflow')
+                if workflow:
+                    self.manager.workflow_runner.advance()
+                    starts = [n['started_at'] for n in workflow['nodes'] if n['started_at'] is not None]
+                    if starts and job['started_at'] is None:
+                        job.update(status='working', started_at=min(starts))
+                        self.set_state(asset, 'planned_maintenance')
+                        asset['flight_phase'] = 'planned_maintenance'
+                finished = workflow['status'] == 'completed' if workflow else (
+                    job['status'] == 'working' and job['started_at']+job['duration'] <= self.env.now)
+                if finished:
                     job.update(status='completed', ended_at=self.env.now)
                     self.inspections.complete(job)
                     queue.pop(0)
                     self.active.pop(aid)
-                    self.resources.release(job['station'], job['resources'])
+                    if workflow:
+                        job['duration'] = self.env.now-job['started_at']
+                    else:
+                        self.resources.release(job['station'], job['resources'])
                     self.set_state(asset, 'available')
                     asset.update(flight_phase='idle', prep_deadline=None, post_planned=True)
                     self.manager.log(aid, '计划维修完成', job['rule'])
@@ -111,7 +126,7 @@ class PlannedMaintenance:
                     service = getattr(self.manager, 'm3_service', None)
                     if service and not service.planned_can_start(asset, job):
                         continue
-                    if asset['mission'] is not None or asset['state'] != 'available':
+                    if asset['mission'] is not None or asset['state'] != 'available' or (asset.get('repair_pending') and not service):
                         continue
                     ground = self.manager.ground
                     if ground and aid in ground.active:
@@ -122,11 +137,18 @@ class PlannedMaintenance:
                     self.set_state(asset, 'planned_wait')
                     job.update(status='waiting', requested_at=self.env.now)
                     self.active[aid] = job
+                    if job.get('_workflow_plan'):
+                        job['_workflow'] = self.manager.workflow_runner.start(job['_workflow_plan'],
+                            dict(activity='INSPECTION' if '_clock' in job else 'CALENDAR',
+                                 owner=str(job['id']), rule=job['rule'], station=job['station'], asset=aid),
+                            on_change=lambda _: self.manager.queue_dispatch())
+                        changed = True
+                        continue
                     job['_event'] = self.resources.request(job['station'], job['resources'])
                     self.env.process(self.wake(job['_event']))
                     self.manager.log(aid, '计划维修等待资源', job['rule'])
                     changed = True
-                if job['status'] == 'waiting' and job['_event'].triggered:
+                if job['status'] == 'waiting' and '_workflow' not in job and job['_event'].triggered:
                     job.update(status='working', started_at=self.env.now)
                     self.set_state(asset, 'planned_maintenance')
                     asset['flight_phase'] = 'planned_maintenance'
