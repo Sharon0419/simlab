@@ -184,6 +184,7 @@ class MainWindow(QMainWindow):
         self.m3_demo_button = button('新建三级供应与维修方式示例', self.new_m3_demo)
         m3_actions = QHBoxLayout()
         m3_actions.addWidget(self.m3_demo_button)
+        m3_actions.addWidget(button('新建采购与报废示例', self.new_lifecycle_demo))
         m3_actions.addWidget(button('预览并迁移当前项目到 M3', self.migrate_m3))
         layout.addLayout(m3_actions)
         metrics = QHBoxLayout()
@@ -393,8 +394,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(aging_page, '部件老化')
         self.m3_supply_page = M3ResultsPage('supply')
         self.m3_service_page = M3ResultsPage('service')
-        tabs.addTab(self.m3_supply_page, '三级供应')
-        tabs.addTab(self.m3_service_page, '维修方式与预防')
+        tabs.addTab(self.m3_supply_page, '调运与采购')
+        tabs.addTab(self.m3_service_page, '维修与寿命')
         tabs.currentChanged.connect(lambda index: self.chart_tabs.setVisible(tabs.widget(index) not in (
             planned_page, inspection_page, aging_page, self.m3_supply_page, self.m3_service_page)))
         layout.addWidget(tabs, 2)
@@ -413,7 +414,8 @@ class MainWindow(QMainWindow):
         <p>在项目概览点击“新建三级供应与维修方式示例”，可直接体验飞机案例。M3执行模式使用三级地点、显式供货与送修路线；没有配置直达策略就不能跳过中间仓。</p>
         <p>补货按库存位置（可用＋已申请未到货－未满足需求）补到目标值。临界库存与周期调运二选一，短时且有货的路线优先，允许拆分；缺货申请持续等待，有货即可履行。运输只计时间，不设容量。</p>
         <p>修复性和预防性维修分别设置原位/换件方式、换件比例及各工序时间与资源。每次只抽一次方式，缺件不改抽；预防性部件完成作业后修复如新，普通飞行小时检查不改变年龄。</p>
-        <p>“三级供应”和“维修方式与预防”结果页显示首轮明细，导出包含全部轮次。旧模型未启用M3时保持原有计算规则；以下两级操作说明针对旧模式。</p>
+        <p>在项目概览新建“采购与报废示例”，可配置任意地点的外部采购、固定交期及部件寿命限值。采购按目标库存补足，与调运同时可用时优先较早到货；新采购件从零寿命开始。累计运行小时或修复次数任一到限即报废，飞行中到限则落地后换件。报废后处置不模拟。</p>
+        <p>“调运与采购”和“维修与寿命”结果页显示首轮明细，导出包含全部轮次。旧模型未启用M3时保持原有计算规则；以下两级操作说明针对旧模式。</p>
         <p>1. 在 System 定义系统，在 Item 定义 LRU。用 MaterielStructure 关联系统与部件。</p>
         <p>2. 在 Station 定义站点，用 StationStructure 定义两级运输关系。</p>
         <p>3. 在 SystemDeployment 配置数量与使用率；USTID 可引用 Station 或 Unit。</p>
@@ -593,6 +595,21 @@ class MainWindow(QMainWindow):
             self.editor.select_table('SimLabSupplyPolicy')
         except Exception as error:
             self.warn('创建三级供应示例失败', str(error))
+
+    def new_lifecycle_demo(self):
+        if self.process is not None:
+            self.warn('计算仍在运行', '请先结束当前实验。')
+            return
+        if self.dirty and not self.save():
+            return
+        from ..m3_sample import lifecycle_project
+        project = lifecycle_project()
+        try:
+            self.adopt_project(project, self.data_dir/'projects'/f'lifecycle-{project["id"][:12]}.sqlite')
+            self.nav.setCurrentRow(1)
+            self.editor.select_table('SimLabPurchasePolicy')
+        except Exception as error:
+            self.warn('创建采购与报废示例失败', str(error))
 
     def new_layered_demo(self):
         if self.process is not None:

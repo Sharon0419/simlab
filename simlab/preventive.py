@@ -6,14 +6,20 @@ class PreventiveClocks:
         self.env, self.parts = env, components
         self.rules = {r['IID']: r for r in tables.get('SimLabItemPreventive', [])}
         self.clocks = {}
-        for part, record in components.records.items():
-            if record['children'] or record['iid'] not in self.rules:
+        self.register(components.records)
+
+    def register(self, parts, fresh=False):
+        """New procurement identities start now, never at the last integration time."""
+        components = self.parts
+        for part in parts:
+            record = components.records[part]
+            if part in self.clocks or record.get('retired') or record.get('retirement_due') or record['children'] or record['iid'] not in self.rules:
                 continue
             rule = self.rules[record['iid']]
             root = record
             while root['parent']:
                 root = components.records[root['parent']]
-            initial = float(rule.get('INITIAL_H') or 0) if components.locations[root['id']] == 'installed' else 0.
+            initial = float(rule.get('INITIAL_H') or 0) if not fresh and components.locations[root['id']] == 'installed' else 0.
             self.clocks[part] = dict(part=part, iid=record['iid'], rule=rule['PMID'],
                 clock=rule['CLOCK'], interval_hours=float(rule['INTERVAL_H']), hours=initial,
                 due_at=None, paused=False, completed_services=0)

@@ -145,7 +145,7 @@ def test_m3_metadata_is_chinese_and_tables_are_navigable():
     assert expected <= TABLES.keys()
     assert expected <= {table for group in MODELING_GROUPS.values() for table in group}
     assert all(table_label(name) != name for name in expected)
-    assert VERSION == 10
+    assert VERSION == 11
 
 
 def test_m3_allows_three_levels_and_returns_canonical_defaulted_tables():
@@ -471,24 +471,24 @@ def test_service_resource_bundle_must_have_capacity_and_common_shift():
         compile_model(tables)
 
 
-def test_version_10_roundtrip_upgrades_old_project_and_preserves_runs(tmp_path):
+def test_version_11_roundtrip_upgrades_old_project_and_preserves_runs(tmp_path):
     old = demo_project()
     old["extensions_version"] = 1
     old["runs"] = [{"id": "historic", "status": "completed", "result": {"value": 1}}]
     database = tmp_path / "old.sqlite"
     save_project(old, database)
     loaded = load_project(database)
-    assert loaded["extensions_version"] == 10
+    assert loaded["extensions_version"] == 11
     assert loaded["runs"] == old["runs"]
     package = tmp_path / "model.simproj"
     export_package(loaded, package)
     imported = import_package(package)
-    assert imported["extensions_version"] == 10
+    assert imported["extensions_version"] == 11
     assert imported["runs"] == old["runs"]
 
 
 def test_project_rejects_future_extension_version():
     project = demo_project()
-    project["extensions_version"] = 11
+    project["extensions_version"] = 12
     with pytest.raises(ValueError, match="扩展格式版本"):
         save_project(project, "future.sqlite")

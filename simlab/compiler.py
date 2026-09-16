@@ -14,6 +14,8 @@ SUPPORTED = {
     'SimLabExecution': {'MODE'},
     'SimLabSupplyRoute': {'ROUTEID', 'IID', 'FROM_STID', 'TO_STID', 'TRANSIT_H'},
     'SimLabSupplyPolicy': {'POINT', 'STID', 'IID', 'TRIGGER', 'TARGET_QTY', 'REORDER_QTY', 'FIRST_H', 'INTERVAL_H'},
+    'SimLabPurchasePolicy': {'POINT', 'STID', 'IID', 'TRIGGER', 'TARGET_QTY', 'REORDER_QTY', 'FIRST_H', 'INTERVAL_H', 'LEAD_H'},
+    'SimLabItemRetirement': {'IID', 'LIMIT_H', 'LIMIT_REPAIRS'},
     'SimLabRepairLocation': {'IID', 'FROM_STID', 'REPAIR_STID'},
     'SimLabServiceRoute': {'ROUTEID', 'IID', 'FROM_STID', 'TO_STID', 'TRANSIT_H'},
     'SimLabMaintenanceRule': {'RULEID', 'MID', 'IID', 'STID', 'KIND', 'METHOD', 'REPLACE_P'},

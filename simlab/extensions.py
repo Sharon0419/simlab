@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 10
+VERSION = 11
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):
@@ -93,6 +93,29 @@ TABLES['SimLabSupplyPolicy'] = [
 TABLES['SimLabSupplyPolicy'][3]['constraints'] = 'Multiple choice: THRESHOLD, PERIODIC'
 TABLES['SimLabSupplyPolicy'][4]['constraints'] = 'Non-negative integer'
 TABLES['SimLabSupplyPolicy'][5]['constraints'] = 'Non-negative integer'
+
+TABLES['SimLabPurchasePolicy'] = [
+    field('POINT', 'Index', '采购配置方案'),
+    field('STID', 'Index', '采购入库站点', references='Station STID'),
+    field('IID', 'Index', '采购部件标识', references='Item IID'),
+    field('TRIGGER', 'Mandatory', '采购触发方式'),
+    field('TARGET_QTY', 'Mandatory', '目标库存位置', 'Integer'),
+    field('REORDER_QTY', 'Regular', '临界库存位置', 'Integer'),
+    field('FIRST_H', 'Regular', '首次周期触发时刻', 'Floating point', '0', unit='Hours'),
+    field('INTERVAL_H', 'Regular', '周期触发间隔', 'Floating point', unit='Hours'),
+    field('LEAD_H', 'Mandatory', '固定采购提前期', 'Floating point', unit='Hours'),
+]
+TABLES['SimLabPurchasePolicy'][3]['constraints'] = 'Multiple choice: THRESHOLD, PERIODIC'
+TABLES['SimLabPurchasePolicy'][4]['constraints'] = 'Non-negative integer'
+TABLES['SimLabPurchasePolicy'][5]['constraints'] = 'Non-negative integer'
+
+TABLES['SimLabItemRetirement'] = [
+    field('IID', 'Index', '寿命到限部件标识', references='Item IID'),
+    field('LIMIT_H', 'Regular', '终身累计运行小时限值', 'Floating point', unit='Hours'),
+    field('LIMIT_REPAIRS', 'Regular', '修复性维修次数限值', 'Integer'),
+]
+TABLES['SimLabItemRetirement'][1]['constraints'] = 'Positive number'
+TABLES['SimLabItemRetirement'][2]['constraints'] = 'Positive integer'
 
 TABLES['SimLabRepairLocation'] = [
     field('IID', 'Index', '部件标识', references='Item IID'),

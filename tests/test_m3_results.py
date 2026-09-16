@@ -99,3 +99,17 @@ def test_result_page_switches_dataset_and_clears_legacy_data():
     assert not page.export_button.isEnabled()
     page.close()
     app.processEvents()
+
+@pytest.mark.parametrize('section,dataset', [('supply', 'purchases'), ('service', 'retirements'), ('service', 'lifetimes')])
+def test_purchase_retirement_exports_preserve_all_reps_and_counts(tmp_path, section, dataset):
+    run = {'id': 'lifecycle', 'result': {'replication_results': [
+        {section: {dataset: [{'part': 'P#1', 'corrective_repairs': 2}],
+                   dataset + '_total': 10001, dataset + '_truncated': True}},
+        {section: {dataset: [{'part': 'P#2', 'corrective_repairs': 0}]}}]}}
+    path = tmp_path / (dataset + '.csv')
+    module().export_m3(run, path, section, dataset)
+    rows = list(csv.DictReader(path.open(encoding='utf-8-sig', newline='')))
+    assert [(r['replication'], r['part']) for r in rows] == [('1', 'P#1'), ('2', 'P#2')]
+    assert rows[0]['detail_total'] == '10001'
+    assert rows[0]['details_truncated'] == 'True'
+    assert rows[1]['details_truncated'] == 'False'

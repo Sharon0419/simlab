@@ -12,6 +12,7 @@ from simlab import __version__
 parser=argparse.ArgumentParser()
 parser.add_argument('--folder',type=Path,default=root/'dist'/'SimLab')
 folder=parser.parse_args().folder.resolve()
+shutil.copy2(root/'README.md', folder/'README.md')
 for name in ['PySide6-Essentials', 'shiboken6', 'simpy', 'numpy', 'pyinstaller']:
     distribution = importlib.metadata.distribution(name)
     for file in distribution.files or []:
@@ -23,7 +24,7 @@ for name in ['PySide6-Essentials', 'shiboken6', 'simpy', 'numpy', 'pyinstaller']
                 shutil.copy2(source, destination)
 shutil.copy2(root/'docs'/'VERIFICATION.md', folder/'VERIFICATION.md')
 (folder/'docs').mkdir(exist_ok=True)
-for name in ['ARCHITECTURE.md', 'DIAGRAMS.md', 'V0.2.md', 'V0.3.md', 'V0.4.md', 'V0.5.md', 'V0.6.md', 'V0.7.md', 'V0.7-SPEC.md', 'V0.8.md', 'V0.8-SPEC.md', 'V0.9.md', 'V0.9.1.md', 'V0.9.2.md', 'V0.10.md', 'METRIC_DICTIONARY.md']:
+for name in ['ARCHITECTURE.md', 'DIAGRAMS.md', 'V0.2.md', 'V0.3.md', 'V0.4.md', 'V0.5.md', 'V0.6.md', 'V0.7.md', 'V0.7-SPEC.md', 'V0.8.md', 'V0.8-SPEC.md', 'V0.9.md', 'V0.9.1.md', 'V0.9.2.md', 'V0.10.md', 'V0.11.md', 'METRIC_DICTIONARY.md']:
     shutil.copy2(root/'docs'/name, folder/'docs'/name)
 case = root/'docs/cases/2026-09-08-aircraft-three-days/success-v0.7'
 if case.exists():
@@ -35,7 +36,8 @@ if ground_case.exists():
     shutil.copytree(ground_case,folder/'docs/cases/aircraft-ground-v0.8',dirs_exist_ok=True)
     for source in ground_case.glob('*.simproj'):
         shutil.copy2(source,folder/'examples'/source.name)
-for name in ('2026-09-16-m3', '2026-09-16-m3-periodic'):
+for name in ('2026-09-16-m3', '2026-09-16-m3-periodic',
+             '2026-09-16-lifecycle', '2026-09-16-lifecycle-periodic'):
     case = root/'docs/cases'/name
     if case.exists():
         shutil.copytree(case, folder/'docs/cases'/name, dirs_exist_ok=True,

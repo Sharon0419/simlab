@@ -16,7 +16,7 @@ class AgingComponents(Components):
     def create(self, iid, location, site=''):
         part = super().create(iid, location, site)
         record = self.records[part]
-        record.update(age=0., lifetime_hours=0.)
+        record.update(age=0., lifetime_hours=0., corrective_repairs=0)
         if location == 'installed':
             for leaf in self.leaves(part):
                 age = self.rules.get(leaf['iid'], {}).get('initial', 0.)

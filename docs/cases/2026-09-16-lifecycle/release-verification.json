@@ -1,0 +1,27 @@
+{
+  "2026-09-16-m3-m3": {
+    "source_exe_equal": true,
+    "saved_equal": true
+  },
+  "2026-09-16-m3-periodic-m3": {
+    "source_exe_equal": true,
+    "saved_equal": true
+  },
+  "2026-09-15-aircraft-aging-PERFECT": {
+    "source_exe_equal": true,
+    "saved_equal": true
+  },
+  "2026-09-15-aircraft-aging-MINIMAL": {
+    "source_exe_equal": true,
+    "saved_equal": true
+  },
+  "lifecycle-THRESHOLD": {
+    "source_exe_equal": true,
+    "saved_equal": false
+  },
+  "lifecycle-PERIODIC": {
+    "source_exe_equal": true,
+    "saved_equal": false
+  },
+  "format10_rejects_format11": true
+}

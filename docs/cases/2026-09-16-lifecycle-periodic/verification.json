@@ -1,0 +1,11 @@
+{
+  "replications": 100,
+  "purchased_arrived": 676,
+  "retired": 217,
+  "physical_and_order_conservation": true,
+  "engine": "0.11.0",
+  "seed": 20260916,
+  "model_hash": "42969dc451bbd28e8cd3cb77167facb14a589d75dcd5e0813872ce2c2bbe3f66",
+  "package_roundtrip": true,
+  "source_exe_first_replication_equal": true
+}

@@ -73,6 +73,10 @@ def _reachable_stock_sites(iid, canonical, point, locations):
         destination for (item, _), destination in locations.items() if item == iid
     )
     routes = [row for row in canonical['SimLabSupplyRoute'] if row['IID'] == iid]
+    sites.update(
+        row['STID'] for row in canonical.get('SimLabPurchasePolicy', [])
+        if row['POINT'] == point and row['IID'] == iid
+    )
     changed = True
     while changed:
         changed = False
@@ -87,6 +91,7 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                     repairs, replacements, depot_processes, schedules, horizon):
     errors = []
     rules = canonical['SimLabMaintenanceRule']
+    retirement_items = {row['IID'] for row in canonical['SimLabItemRetirement']}
     rule_by_id = {row['RULEID']: row for row in rules}
     rule_by_context = {
         (row['MID'], row['IID'], row['STID'], row['KIND']): row for row in rules
@@ -124,7 +129,9 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
             continue
         steps_by_rule.setdefault(row['RULEID'], set()).add(row['STEP'])
         allowed = {
-            'IN_PLACE': {'DIAGNOSE', 'IN_PLACE', 'TEST'},
+            'IN_PLACE': ({'DIAGNOSE', 'IN_PLACE', 'REMOVE', 'INSTALL', 'TEST'}
+                         if rule['IID'] in retirement_items and rule['KIND'] == 'CORRECTIVE'
+                         else {'DIAGNOSE', 'IN_PLACE', 'TEST'}),
             'REPLACE': {'DIAGNOSE', 'REMOVE', 'INSTALL', 'TEST'},
             'MIXED': {'DIAGNOSE', 'IN_PLACE', 'REMOVE', 'INSTALL', 'TEST'},
         }[rule['METHOD']]
@@ -316,6 +323,41 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                             f'SimLabMaintenanceRule: {part["iid"]}/{child["iid"]}@{station} '
                             '缺少 CORRECTIVE 规则。'
                         )
+
+    # A lifetime limit can force replacement even when the normal corrective
+    # method is in-place. Explicit rules therefore carry REMOVE/INSTALL/TEST;
+    # legacy contexts reuse their ItemReplacement definition.
+    for fleet in fleets:
+        for part in fleet['parts']:
+            contexts = [(fleet['sid'], part['iid'], fleet['home'])]
+            parent_rule = corrective_rule(fleet['sid'], part['iid'], fleet['home'])
+            child_sites = {fleet['home']}
+            if 'IN_PLACE' in _draw_methods(parent_rule):
+                child_sites.add(fleet['home'])
+            if 'REPLACE' in _draw_methods(parent_rule):
+                destination = locations.get((part['iid'], fleet['home']))
+                if destination:
+                    child_sites.add(destination)
+            contexts.extend(
+                (part['iid'], child['iid'], station)
+                for child in children.get(part['iid'], [])
+                for station in child_sites
+            )
+            for mid, iid, station in contexts:
+                if iid not in retirement_items:
+                    continue
+                explicit = rule_by_context.get((mid, iid, station, 'CORRECTIVE'))
+                if explicit is not None:
+                    missing = {'REMOVE', 'INSTALL', 'TEST'} - steps_by_rule.get(explicit['RULEID'], set())
+                    if missing:
+                        errors.append(
+                            f'SimLabMaintenanceRule {explicit["RULEID"]}: '
+                            f'报废换件缺少工序 {", ".join(sorted(missing))}。')
+                if explicit is None and (mid, iid, station) not in replacements:
+                    errors.append(
+                        f'SimLabItemRetirement.{iid}: 报废换件上下文 '
+                        f'{mid}/{iid}@{station} 缺少 CORRECTIVE 或 ItemReplacement 定义。'
+                    )
 
     # A queued PM can survive parent relocation in two ways: MINIMAL in-place
     # correction leaves the failed child attached, or a different leaf fails and

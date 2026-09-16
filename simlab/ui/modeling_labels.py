@@ -3,7 +3,7 @@ from ..schema import TABLES, table_label, field_label
 from ..validation import choices
 
 VALUE_LABELS = {
-    'M3': '三级供应与维修方式', 'THRESHOLD': '临界库存触发', 'PERIODIC': '指定周期调运',
+    'M3': '三级供应与维修方式', 'THRESHOLD': '临界库存触发', 'PERIODIC': '指定周期触发',
     'EXPONENTIAL': '指数分布',
     'CORRECTIVE': '修复性维修', 'PREVENTIVE': '预防性维修',
     'IN_PLACE': '原位维修', 'REPLACE': '换件维修', 'MIXED': '按比例选择',

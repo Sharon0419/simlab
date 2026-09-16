@@ -8,6 +8,7 @@ TABLES = {**SCHEMA['tables'], **EXTENSION_TABLES}
 TABLE_LABELS = {
     'SimLabExecution': '执行模式',
     'SimLabSupplyRoute': '补给路线', 'SimLabSupplyPolicy': '库存补货策略',
+    'SimLabPurchasePolicy': '外部采购策略', 'SimLabItemRetirement': '部件寿命报废',
     'SimLabRepairLocation': '维修地点映射', 'SimLabServiceRoute': '送修路线',
     'SimLabMaintenanceRule': '维修方式规则', 'SimLabMaintenanceStep': '在位维修工序',
     'SimLabOffItemService': '拆下件维修工序', 'SimLabItemPreventive': '部件预防维修时钟',
@@ -43,6 +44,8 @@ FIELD_LABELS = {
     'MODE': '执行模式', 'ROUTEID': '路线标识', 'FROM_STID': '起点站点',
     'TO_STID': '终点站点', 'TRANSIT_H': '运输时长', 'TRIGGER': '触发方式',
     'TARGET_QTY': '目标库存位置', 'REORDER_QTY': '临界库存位置',
+    'LEAD_H': '采购提前期', 'LIMIT_H': '终身运行小时限值',
+    'LIMIT_REPAIRS': '修复性维修次数限值',
     'REPAIR_STID': '维修站点', 'RULEID': '维修规则标识', 'KIND': '维修类别',
     'METHOD': '维修方式', 'REPLACE_P': '换件概率', 'STEP': '工序',
     'DISTRIBUTION': '时长分布', 'CLOCK': '计时方式',
@@ -128,11 +131,11 @@ def value(table, row, column, fallback=''):
 
 # Workflow order applies to navigation only; the original dictionary is unchanged.
 MODELING_GROUPS = {
-    '01  装备组成': ('System', 'Item', 'MaterielStructure', 'SimLabItemAging', 'SimLabItemPreventive'),
+    '01  装备组成': ('System', 'Item', 'MaterielStructure', 'SimLabItemAging', 'SimLabItemRetirement', 'SimLabItemPreventive'),
     '02  站点与部署': ('Station', 'StationStructure', 'Unit', 'SystemDeployment'),
     '03  资源与班次': ('Resource', 'Shift', 'ShiftProfile', 'ResourceStationData', 'ResourceAllocation'),
     '04  维修与保障作业': ('Tasks', 'TaskResource', 'ItemRepair', 'ItemReplacement', 'SimLabDepotProcess', 'SimLabMaintenanceRule', 'SimLabMaintenanceStep', 'SimLabOffItemService', 'SimLabRepairLocation', 'SimLabServiceRoute', 'SimLabPlannedMaintenance', 'SimLabFlightInspection', 'SimLabInspectionInitial'),
-    '05  备件与供应': ('StockAllocation', 'SimLabSupplyRoute', 'SimLabSupplyPolicy'),
+    '05  备件与供应': ('StockAllocation', 'SimLabSupplyRoute', 'SimLabSupplyPolicy', 'SimLabPurchasePolicy'),
     '06  任务与运行': ('MissionType', 'MissionSystem', 'OperationProfile', 'Operations', 'SimLabDutyRule', 'SimLabFlightRule'),
     '07  仿真控制': ('Control', 'SimLabExecution'),
 }

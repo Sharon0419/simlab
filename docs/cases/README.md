@@ -1,3 +1,7 @@
+# v0.11采购与寿命报废
+
+[临界采购](2026-09-16-lifecycle/评估报告.md)与[周期采购](2026-09-16-lifecycle-periodic/评估报告.md)各100轮，含输入、可导入项目包、全轮CSV和守恒证据。复现：`tools/run_lifecycle_case.py`，周期加`--periodic`，EXE对照加`--exe`。
+
 # M3三级供应与维修方式（v0.10）
 
 [临界库存调运](2026-09-16-m3/评估报告.md)与[周期调运](2026-09-16-m3-periodic/评估报告.md)各1000轮，合成4架飞机案例。输入、simproj、六类全轮CSV及数量守恒验证同目录。复现：`tools/run_m3_case.py`，周期方案加`--periodic --output docs/cases/2026-09-16-m3-periodic`；EXE重放加`--exe dist/SimLab/SimLab.exe`。演示结果不代表实际策略优劣结论。

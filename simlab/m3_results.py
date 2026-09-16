@@ -4,8 +4,10 @@ import json
 
 
 DATASETS = {
-    'supply': {'orders': '补货申请', 'shipments': '运输批次', 'stocks': '期末库存', 'demands': '取件需求'},
-    'service': {'jobs': '维修工单', 'clocks': '部件预防计时'},
+    'supply': {'orders': '补货申请', 'shipments': '调运批次', 'purchases': '外部采购',
+               'stocks': '期末库存', 'demands': '取件需求'},
+    'service': {'jobs': '维修工单', 'clocks': '部件预防计时',
+                'retirements': '报废记录', 'lifetimes': '实物寿命台账'},
 }
 LABELS = {
     'id': '编号', 'sequence': '先后序号', 'station': '站点', 'iid': '部件', 'created': '申请时刻/h',
@@ -27,12 +29,24 @@ LABELS = {
     'completed_in_place': '完成原位', 'completed_replace': '完成换件',
     'job_count': '工单数', 'completed_jobs': '完成工单', 'pending_jobs': '未完工单',
     'corrective': '修复性维修', 'preventive': '预防性维修',
+    'corrective_repairs': '累计修复次数', 'retired': '已报废', 'retirement_due': '待报废',
+    'limit_hours': '运行小时限值/h', 'limit_repairs': '维修次数限值',
+    'purchase_count': '采购批次数', 'purchased': '采购件数', 'purchase_received': '采购到货件数',
+    'retirement_count': '报废件数', 'time': '时刻/h', 'site': '地点', 'location': '位置',
+    'age': '有效年龄/h',
 }
 VALUES = {
     'CORRECTIVE': '修复性维修', 'PREVENTIVE': '预防性维修',
     'IN_PLACE': '原位维修', 'REPLACE': '换件维修', 'MIXED': '按比例选择', 'OFF_ITEM': '拆下件维修',
     'OPERATING': '有效运行小时', 'CALENDAR': '日历小时',
-    'THRESHOLD': '临界库存', 'PERIODIC': '周期调运',
+    'THRESHOLD': '临界库存', 'PERIODIC': '指定周期',
+    'RETIREMENT': '到限换件', 'LIFETIME_HOURS': '运行小时到限',
+    'REPAIR_COUNT': '维修次数到限', 'PARENT_RETIRED': '随整件退出',
+    'retired': '已报废', 'retired_with_parent': '随整件退出',
+    'LIMIT_H': '运行小时到限', 'LIMIT_REPAIRS': '维修次数到限',
+    'PARENT_RETIREMENT': '随整件退出', 'cancelled_retirement': '已因报废取消',
+    'installed': '装机', 'attached': '附属部件', 'stock': '库存',
+    'held': '已取件', 'service': '维修中', 'service_transport': '送修在途',
     'queued': '已排队', 'starting': '准备开始', 'waiting_resource': '等待资源', 'working': '作业中',
     'waiting_spare': '等待备件', 'transport': '送修运输', 'completed': '已完成',
     'covered_by_corrective': '已由修复性维修覆盖', 'pending': '待满足',

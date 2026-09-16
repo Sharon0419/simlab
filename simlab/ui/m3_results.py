@@ -65,8 +65,17 @@ class M3ResultsPage(QWidget):
             notice += f' · 已截断（总数 {detail_total(data, dataset)}）'
         self.notice.setText(notice)
         totals = data.get('totals') or {}
-        self.summary.setText('首轮汇总：' + '；'.join(
-            f'{LABELS.get(key, key)} {display(value)}' for key, value in totals.items()))
+        if dataset == 'purchases':
+            self.summary.setText(f"采购 {totals.get('purchase_count', 0)} 批 · "
+                                 f"订购 {totals.get('purchased', 0)} 件 · "
+                                 f"已到货 {totals.get('purchase_received', 0)} 件")
+        elif dataset == 'retirements':
+            self.summary.setText(f'报废及随整件退出 {detail_total(data, dataset)} 件')
+        elif dataset == 'lifetimes':
+            self.summary.setText(f'实物总数 {detail_total(data, dataset)} 件')
+        else:
+            self.summary.setText('首轮汇总：' + '；'.join(
+                f'{LABELS.get(key, key)} {display(value)}' for key, value in totals.items()))
 
     def export_path(self, path):
         if not self.run:

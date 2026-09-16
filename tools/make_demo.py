@@ -50,3 +50,12 @@ p['runs'].append({'id': uuid.uuid4().hex, 'name': '三级供应演示', 'status'
                   'source_revision': p['revision'], 'result': result})
 export_package(p, directory/'三级供应与维修方式-含结果.simproj')
 print(f'Generated 2 M3 packages; availability={result["availability"]:.6f}')
+from simlab.m3_sample import lifecycle_project
+p = lifecycle_project()
+export_package(p, directory/'采购与寿命报废-模型.simproj', False)
+result = simulate(p['tables'])
+p['runs'].append({'id': uuid.uuid4().hex, 'name': '采购与寿命报废演示', 'status': 'completed',
+                  'started': now(), 'snapshot': p['tables'].copy(), 'model_hash': model_hash(p['tables']),
+                  'source_revision': p['revision'], 'result': result})
+export_package(p, directory/'采购与寿命报废-含结果.simproj')
+print(f'Generated 2 lifecycle packages; availability={result["availability"]:.6f}')

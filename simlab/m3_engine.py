@@ -61,11 +61,26 @@ class Exposure:
                 record['budget'] = max(0., record['budget'] - risk_increment(record['age'], hours, shape, scale, multiplier))
             record['age'] += hours
             record['lifetime_hours'] += hours
+        if self.service.retirement.enabled:
+            for record, rate in self.lifetime_entries():
+                if record['id'] not in operating:
+                    record['lifetime_hours'] += elapsed*rate
         self.clocks.integrate(elapsed, operating)
         self.last = self.env.now
 
+    def lifetime_entries(self):
+        for asset in self.assets:
+            active = asset['mission'] is not None if self.config['missions'] else asset['state'] == 'available'
+            if active:
+                for slot in asset['slots']:
+                    if slot['token']:
+                        for record in self.service.retirement.tree(slot['token']):
+                            if not record.get('retired'):
+                                yield record, asset['_fleet']['util']
+
     def due(self):
         self.integrate()
+        self.service.retirement.due()
         manager = self.service.manager
         if manager and getattr(manager, 'planned', None):
             manager.planned.register_due()
@@ -78,6 +93,7 @@ class Exposure:
     def run(self):
         while True:
             self.integrate()
+            self.service.retirement.due()
             # A true fault at the same instant takes precedence over unstarted PM.
             for asset, slot, record, util, shape, scale, multiplier in list(self.entries()):
                 if multiplier and record['budget'] is not None and record['budget'] <= 1e-12:
@@ -94,6 +110,9 @@ class Exposure:
                     delay = min(delay, remaining_age(record['age'], shape, scale, record['budget'], multiplier)/util)
             for part in self.clocks.clocks:
                 delay = min(delay, self.clocks.remaining(part, rates.get(part, 0.)))
+            if self.service.retirement.enabled:
+                for record, rate in self.lifetime_entries():
+                    delay = min(delay, self.service.retirement.remaining(record, rate))
             event = self.event
             self.event = self.env.event()
             if event.triggered:
@@ -215,7 +234,7 @@ def run_one(config, replication=0, progress=None):
     installed = [s['token'] for a in assets for s in a['slots'] if s['token'] is not None]
     stocked = [p for store in supply.stores.values() for p in store.items]
     parts.validate(installed, stocked)
-    assert initial_by_item == dict(Counter(r['iid'] for r in parts.records.values()))
+    assert Counter(initial_by_item) + supply.created_counts == Counter(r['iid'] for r in parts.records.values())
     pool.update()
     return dict(aging=parts.age_snapshot(), supply=supply.snapshot(), service=service.snapshot(),
         availability=totals['available']/denominator, failures=sum(failures.values()), maintenance=None,

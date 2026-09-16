@@ -12,3 +12,4 @@ tmp/
 !docs/cases/**/*.simproj
 # Generated shortcuts contain this machine's user-data project paths.
 /打开飞机*.cmd
+/docs/cases/**/replay-*.json

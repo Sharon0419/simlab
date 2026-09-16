@@ -2,6 +2,7 @@
 from collections import Counter
 from contextlib import contextmanager
 import heapq
+from .retirement import Retirement
 
 
 class ServiceCoordinator:
@@ -23,6 +24,7 @@ class ServiceCoordinator:
         self.quarantined = set()
         self.reservations = {}
         self._registration_depth = 0
+        self.retirement = Retirement(self)
         supply.eligible = self.eligible
         supply.on_stock = self.on_stock
 
@@ -32,7 +34,8 @@ class ServiceCoordinator:
         return part
 
     def eligible(self, part):
-        return not self.parts.records[part]['broken'] and all(
+        return not any(r.get('retired') or r.get('retirement_due') or self.retirement.reason(r)
+                       for r in self.retirement.tree(part)) and not self.parts.records[part]['broken'] and all(
             not r['broken'] and not r.get('preventive_due') for r in self.parts.leaves(part))
 
     def locate(self, part):
@@ -65,10 +68,10 @@ class ServiceCoordinator:
         if len(self.jobs) >= 200000:
             raise RuntimeError('M3 服务工单规模超过200000，仿真停止。')
         record = self.parts.records[part]
-        rule = None if off else self.rule(mid, record['iid'], station, kind)
+        rule = None if off else self.rule(mid, record['iid'], station, 'CORRECTIVE' if kind == 'RETIREMENT' else kind)
         job = dict(id=f'J{len(self.jobs)+1:06d}', kind=kind, rule=rule['RULEID'] if rule else 'OFF_ITEM',
             part=part, iid=record['iid'], parent=mid, asset=asset['id'] if asset else '', station=station,
-            method=self.select_method(rule) if rule else 'OFF_ITEM', status='queued',
+            method='REPLACE' if kind == 'RETIREMENT' else self.select_method(rule) if rule else 'OFF_ITEM', status='queued',
             due_at=self.env.now if due is None else due, started_at=None, ended_at=None,
             age_before=record.get('age'), age_after=None, lifetime_hours=record.get('lifetime_hours'),
             overrun_hours=0., _rule=rule, _asset=asset, _slot=slot, _off=off)
@@ -78,6 +81,8 @@ class ServiceCoordinator:
 
     def corrective(self, asset, slot):
         part = slot['token']
+        if self.parts.records[part].get('retirement_due'):
+            return
         old = next((j for j in self.jobs if j['part'] == part and j['kind'] == 'CORRECTIVE'
                     and j['ended_at'] is None and not j['_off']), None)
         if old:
@@ -87,6 +92,8 @@ class ServiceCoordinator:
         return job
 
     def preventive(self, part):
+        if self.parts.records[part].get('retired') or self.parts.records[part].get('retirement_due'):
+            return
         if any(j['part'] == part and j['kind'] == 'PREVENTIVE' and j['ended_at'] is None for j in self.jobs):
             return
         record = self.parts.records[part]
@@ -111,7 +118,7 @@ class ServiceCoordinator:
 
     @staticmethod
     def priority(job):
-        return (0 if job['kind'] == 'CORRECTIVE' else 1, job['due_at'], 2, job['rule'], job['id'])
+        return (-1 if job['kind'] == 'RETIREMENT' else 0 if job['kind'] == 'CORRECTIVE' else 1, job['due_at'], 2, job['rule'], job['id'])
 
     @contextmanager
     def registration_batch(self):
@@ -178,6 +185,17 @@ class ServiceCoordinator:
             self.env.process(self.run(job, key))
 
     def on_stock(self, station, part):
+        if self.runtime:
+            self.runtime.integrate()
+        if self.clocks:
+            self.clocks.register((r['id'] for r in self.retirement.tree(part)), fresh=True)
+        if self.runtime:
+            self.runtime.changed()
+        self.retirement.due()
+        if self.parts.records[part].get('retired'):
+            self.supply.withdraw(part)
+            self.parts.move(part, 'retired', station)
+            return
         if not self.eligible(part):
             self.supply.withdraw(part)
             self.quarantined.add(part)
@@ -267,6 +285,11 @@ class ServiceCoordinator:
                     other.update(status='covered_by_corrective', ended_at=self.env.now,
                                  age_after=self.parts.records[part]['age'])
         record = self.parts.records[part]
+        if job['kind'] == 'CORRECTIVE' and self.retirement.enabled:
+            record['corrective_repairs'] += 1
+            reason = self.retirement.reason(record)
+            if reason:
+                self.retirement.request(part, reason)
         job.update(age_after=record['age'], lifetime_hours=record['lifetime_hours'])
 
     def children(self, job):
@@ -283,8 +306,8 @@ class ServiceCoordinator:
         part, kind = job['part'], job['kind']
         record = self.parts.records[part]
         if not job['_off'] and (job['_rule'] or {}).get('STID', job['station']) != job['station']:
-            rule = self.rule(job['parent'], job['iid'], job['station'], kind)
-            if rule['METHOD'] not in ('MIXED', job['method']):
+            rule = self.rule(job['parent'], job['iid'], job['station'], 'CORRECTIVE' if kind == 'RETIREMENT' else kind)
+            if kind != 'RETIREMENT' and rule['METHOD'] not in ('MIXED', job['method']):
                 raise ValueError(f"M3 已选维修方式 {job['method']} 在新地点 {job['station']} 缺少兼容规则")
             job.update(rule=rule['RULEID'], _rule=rule)
         if self.runtime:
@@ -314,9 +337,11 @@ class ServiceCoordinator:
             yield from self.step(job, 'TEST', off=True)
             if not record['children']:
                 self.finish_leaf(job)
-            self.supply.return_part(destination, part)
+            if not record.get('retired'):
+                self.supply.return_part(destination, part)
         else:
-            yield from self.step(job, 'DIAGNOSE')
+            if kind != 'RETIREMENT':
+                yield from self.step(job, 'DIAGNOSE')
             if job['method'] == 'IN_PLACE':
                 if record['children']:
                     yield from self.children(job)
@@ -328,12 +353,17 @@ class ServiceCoordinator:
                 yield from self.step(job, 'REMOVE')
                 parent = record['parent']
                 if parent:
+                    if kind == 'RETIREMENT':
+                        job['_assembly'] = parent
                     index = self.parts.detach(parent, part)
                 else:
                     job['_slot']['token'] = None
                     self.parts.move(part, 'held', job['station'])
-                off = self.create_job(part, kind, job['parent'], job['station'], off=True)
-                off['status'] = 'starting'
+                if kind == 'RETIREMENT':
+                    self.retirement.dispose(part, asset=job['asset'])
+                else:
+                    off = self.create_job(part, kind, job['parent'], job['station'], off=True)
+                    off['status'] = 'starting'
                 # Detached parts leave the installed tree lock, but retain their
                 # own lock while off-item repair and any pending PM are serialized.
                 for pending in self.jobs:
@@ -341,8 +371,9 @@ class ServiceCoordinator:
                         pending.update(_asset=None, _slot=None, asset='')
                         if pending['part'] == part:
                             pending.update(_off=True, method='OFF_ITEM')
-                self.locks[part] = off['id']
-                self.env.process(self.run(off, part))
+                if kind != 'RETIREMENT':
+                    self.locks[part] = off['id']
+                    self.env.process(self.run(off, part))
                 job['status'] = 'waiting_spare'
                 if job['_asset']:
                     self.set_state(job['_asset'], 'waiting_spare')
@@ -368,6 +399,8 @@ class ServiceCoordinator:
                     self.advance()
                 if parent:
                     self.parts.attach(parent, index, spare)
+                    if kind == 'RETIREMENT' and all(c and not self.parts.records[c]['broken'] for c in self.parts.records[parent]['children']):
+                        self.parts.restore(parent)
                 else:
                     job['_slot']['token'] = spare
                     self.parts.move(spare, 'installed', job['station'])
@@ -385,11 +418,14 @@ class ServiceCoordinator:
             if not self.blocked(asset):
                 asset.update(flight_phase='idle', prep_deadline=None, post_planned=True)
                 self.set_state(asset, 'available')
-        root = self.root(job['part'])
-        if root in self.quarantined and self.eligible(root) and root not in self.locks:
-            self.quarantined.remove(root)
-            if self.parts.locations[root] != 'stock':
-                self.supply.return_part(self.parts.records[root]['site'], root)
+        roots = {self.root(job['part'])}
+        if job.get('_assembly'):
+            roots.add(self.root(job['_assembly']))
+        for root in sorted(roots):
+            if root in self.quarantined and self.eligible(root) and root not in self.locks:
+                self.quarantined.remove(root)
+                if self.parts.locations[root] != 'stock':
+                    self.supply.return_part(self.parts.records[root]['site'], root)
         self.advance()
         if self.runtime:
             self.runtime.changed()
@@ -403,4 +439,5 @@ class ServiceCoordinator:
             jobs_total=len(self.jobs), clocks_total=len(self.clocks.clocks) if self.clocks else 0,
             jobs_truncated=len(self.jobs)>len(rows), clocks_truncated=bool(self.clocks and len(self.clocks.clocks)>10000),
             totals=dict(status=dict(counts), selected=dict(selected), completed=dict(completed)),
-            random_streams=dict(failure=0, repair=1, replace=2, method=3, preventive=4))
+            random_streams=dict(failure=0, repair=1, replace=2, method=3, preventive=4),
+            **self.retirement.snapshot())

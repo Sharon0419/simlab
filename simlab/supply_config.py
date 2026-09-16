@@ -5,7 +5,8 @@ from .schema import TABLES, effective
 
 
 M3_TABLES = {
-    'SimLabExecution', 'SimLabSupplyRoute', 'SimLabSupplyPolicy',
+    'SimLabExecution', 'SimLabSupplyRoute', 'SimLabSupplyPolicy', 'SimLabPurchasePolicy',
+    'SimLabItemRetirement',
     'SimLabRepairLocation', 'SimLabServiceRoute', 'SimLabMaintenanceRule',
     'SimLabMaintenanceStep', 'SimLabOffItemService', 'SimLabItemPreventive',
 }
@@ -132,6 +133,37 @@ def compile_supply(tables, point, horizon):
                 periodic_orders += math.floor((horizon - first) / interval) + 1
     if periodic_orders > 200000:
         errors.append('SimLabSupplyPolicy: 周期触发每轮最多生成 200000 份订单。')
+
+    purchase_orders = 0
+    for index, row in enumerate(canonical['SimLabPurchasePolicy'], 1):
+        target = int(float(row['TARGET_QTY'])) if row['TARGET_QTY'] else 0
+        threshold = int(float(row['REORDER_QTY'])) if row['REORDER_QTY'] else 0
+        trigger = row['TRIGGER']
+        if target <= 0:
+            errors.append(f'SimLabPurchasePolicy 第 {index} 行.TARGET_QTY: 必须为正整数。')
+        if trigger == 'THRESHOLD':
+            if target <= threshold:
+                errors.append(f'SimLabPurchasePolicy 第 {index} 行.TARGET_QTY: 必须大于 REORDER_QTY。')
+            if row['INTERVAL_H'] not in ('', None):
+                errors.append(f'SimLabPurchasePolicy 第 {index} 行.INTERVAL_H: 临界模式不使用此字段，必须留空。')
+            if _num(row, 'FIRST_H') != 0:
+                errors.append(f'SimLabPurchasePolicy 第 {index} 行.FIRST_H: 临界模式不使用此字段。')
+        elif trigger == 'PERIODIC':
+            interval, first = _num(row, 'INTERVAL_H'), _num(row, 'FIRST_H')
+            if interval < 1e-6:
+                errors.append(f'SimLabPurchasePolicy 第 {index} 行.INTERVAL_H: 周期间隔必须至少为 1e-6 小时。')
+            if row['REORDER_QTY'] not in ('', None):
+                errors.append(f'SimLabPurchasePolicy 第 {index} 行.REORDER_QTY: 周期模式不使用此字段，必须留空。')
+            if interval >= 1e-6 and first <= horizon:
+                purchase_orders += math.floor((horizon - first) / interval) + 1
+    if purchase_orders > 200000:
+        errors.append('SimLabPurchasePolicy: 周期触发每轮最多生成 200000 份采购订单。')
+
+    for index, row in enumerate(canonical['SimLabItemRetirement'], 1):
+        if not row['LIMIT_H'] and not row['LIMIT_REPAIRS']:
+            errors.append(
+                f'SimLabItemRetirement 第 {index} 行: LIMIT_H 与 LIMIT_REPAIRS 至少填写一项。'
+            )
 
     locations = canonical['SimLabRepairLocation']
     for index, row in enumerate(locations, 1):

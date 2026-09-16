@@ -61,3 +61,20 @@ def m3_project(replications=5):
                 STEP=step, DURATION_H=duration, DISTRIBUTION='FIXED', TASK='FIX'))
     project['tables'] = tables
     return project
+
+
+def lifecycle_project(replications=5):
+    """Procurement/retirement demonstration; these are synthetic assumptions."""
+    project = m3_project(replications)
+    project['name'] = '示例 · 采购与寿命报废'
+    tables = project['tables']
+    tables['SimLabPurchasePolicy'] = [dict(
+        POINT='BASELINE', STID=station, IID='POWER', TRIGGER='THRESHOLD',
+        TARGET_QTY='2', REORDER_QTY='1', LEAD_H='4')
+        for station in ('BASE', 'CENTER')]
+    tables['SimLabItemRetirement'] = [dict(IID='POWER', LIMIT_H='6', LIMIT_REPAIRS='2')]
+    # Limited starting supply makes external replenishment visible in a short run.
+    for row in tables['StockAllocation']:
+        if row['STID'] == 'CENTER':
+            row['STSIZ'] = '1'
+    return project

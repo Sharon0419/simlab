@@ -70,6 +70,50 @@ def check_m3(window, directory, failures):
     export_package(window.project, directory/'m3.simproj')
     restored = import_package(directory/'m3.simproj')
     assert restored['runs'][-1]['result'] == result
-    return ['M3 input and example', 'M3 worker', 'M3 supply and service results',
+    checks = ['M3 input and example', 'M3 worker', 'M3 supply and service results',
             'M3 all-replication CSV', 'M3 physical conservation', 'format10 M3 roundtrip',
             'M3 migration preview cancel', 'M3 migration independent copy']
+    checks += check_lifecycle(window, directory, failures)
+    return checks
+
+
+def check_lifecycle(window, directory, failures):
+    window.new_lifecycle_demo()
+    assert not failures, failures
+    assert window.project['tables']['SimLabPurchasePolicy']
+    window.editor.select_table('SimLabItemRetirement')
+    assert window.editor.grid.rowCount() == 1
+    assert window.save()
+    window.grab().save(str(directory/'27-retirement-input.png'))
+    window.nav.setCurrentRow(2)
+    window.repetitions.setValue(2)
+    QTest.mouseClick(window.run_button, Qt.LeftButton)
+    deadline = time.monotonic() + 120
+    while window.process is not None and time.monotonic() < deadline:
+        QTest.qWait(50)
+    assert window.process is None and not failures, failures
+    run = window.project['runs'][-1]
+    assert run['status'] == 'completed', run
+    for rep in run['result']['replication_results']:
+        assert rep['supply']['purchases'] and rep['service']['retirements']
+        assert rep['parts']['final'] > rep['parts']['initial']
+    window.nav.setCurrentRow(3)
+    for page, dataset, screenshot in (
+        (window.m3_supply_page, 'purchases', '28-purchases.png'),
+        (window.m3_service_page, 'retirements', '29-retirements.png'),
+        (window.m3_service_page, 'lifetimes', '30-lifetimes.png')):
+        window.result_tabs.setCurrentWidget(page)
+        page.selector.setCurrentIndex(page.selector.findData(dataset))
+        assert page.table.rowCount() > 0
+        path = directory / (dataset + '.csv')
+        page.export_path(path)
+        with path.open(encoding='utf-8-sig', newline='') as handle:
+            rows = list(csv.DictReader(handle))
+        assert {r['replication'] for r in rows} == {'1', '2'}
+        QTest.qWait(50)
+        window.grab().save(str(directory/screenshot))
+    export_package(window.project, directory/'lifecycle.simproj')
+    assert import_package(directory/'lifecycle.simproj')['runs'][-1]['result'] == run['result']
+    return ['lifecycle input and example', 'lifecycle worker and physical growth',
+            'purchase results and all-rep CSV', 'retirement results and all-rep CSV',
+            'lifetime ledger and all-rep CSV', 'format11 lifecycle roundtrip']
