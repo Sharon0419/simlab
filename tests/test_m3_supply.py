@@ -291,3 +291,24 @@ def test_truncated_details_do_not_truncate_totals_or_validation():
     assert result['totals']['received'] == 3
     assert result['detail_counts']['orders'] == {'total': 3, 'retained': 1, 'truncated': True}
     s.validate()
+
+
+@pytest.mark.parametrize('stations', [('b', 'c'), ('c', 'b')])
+@pytest.mark.parametrize('transit', [0, 1])
+def test_same_tick_periodic_sponsorship_reaches_target_in_both_row_orders(stations, transit):
+    env, _, s = network([route('a', 'b', transit), route('b', 'c', transit)],
+                         [policy(st, 1, first=0, interval=10) for st in stations], {'a': 5})
+    s.start(); env.run(until=3)
+    result = s.snapshot()
+    assert {r['station']: r['inventory_position'] for r in result['stocks']} == {'a': 3, 'b': 1, 'c': 1}
+    b_orders = [r for r in result['orders'] if r['station'] == 'b']
+    assert sum(r['quantity'] for r in b_orders) == 2
+    # D9: an earlier commitment remains intact; stabilization may add an order.
+    assert [r['quantity'] for r in b_orders] == ([1, 1] if stations[0] == 'b' else [2])
+    assert sum(r['quantity'] for r in result['orders'] if r['station'] == 'c') == 1
+    taken = s.request_part('b', 'X')
+    env.run(until=4)
+    assert taken.triggered
+    assert len(s.available('b', 'X')) == 0
+    assert s.snapshot()['totals']['order_count'] == result['totals']['order_count']
+    s.validate()

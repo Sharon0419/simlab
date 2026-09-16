@@ -28,7 +28,7 @@ class SupplyNetwork:
         self._pending_orders, self._pending_demands = [], []
         self._sequence = 0
         self._started = self._scheduled = self._running = False
-        self._periodic_due = set()
+        self._periodic_due_at = {}
         self._initial_counts = None
         self._initial_ids = None
         self.eligible = self._healthy
@@ -106,7 +106,7 @@ class SupplyNetwork:
         for key, row in self.policies.items():
             if (station is None or station == key[0]) and (iid is None or iid == key[1]):
                 if row['TRIGGER'] == 'PERIODIC':
-                    self._periodic_due.add(key)
+                    self._periodic_due_at[key] = self.env.now
         self.allocate()
 
     def _next_sequence(self):
@@ -199,14 +199,17 @@ class SupplyNetwork:
                     for key, policy in policies:
                         ip = len(self.available(*key)) + unreceived[key] - unmet[key]
                         trigger = (ip <= policy['REORDER_QTY'] if policy['TRIGGER'] == 'THRESHOLD'
-                                   else key in self._periodic_due)
+                                   else self._periodic_due_at.get(key) == self.env.now)
                         if trigger and policy['TARGET_QTY'] > ip:
                             self.order(*key, policy['TARGET_QTY'] - ip, reason=policy['TRIGGER'])
                             created = True
                             # Sponsor only the portion that no available candidate can fill.
                             self._fulfil()
                             unreceived, unmet = self._balances()
-                    self._periodic_due.clear()
+                    # Keep a tick eligible through every same-time stabilization,
+                    # including zero-time receipts that schedule another phase.
+                    # Timestamp equality expires eligibility between periods;
+                    # committed orders remain intact and prevent double ordering.
                 if not created:
                     break
         finally:
