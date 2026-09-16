@@ -9,8 +9,11 @@ from .planned import compile_planned
 from .aging import compile_aging
 from .supply_config import M3_TABLES, compile_supply
 from .service_config import compile_service
+from .workflow_config import compile_workflows, bind_flight_activities
+from .redundancy import compile_redundancy
 
 SUPPORTED = {
+    'SimLabRedundancy': {'PARENT', 'IID', 'K'},
     'SimLabExecution': {'MODE'},
     'SimLabSupplyRoute': {'ROUTEID', 'IID', 'FROM_STID', 'TO_STID', 'TRANSIT_H'},
     'SimLabSupplyPolicy': {'POINT', 'STID', 'IID', 'TRIGGER', 'TARGET_QTY', 'REORDER_QTY', 'FIRST_H', 'INTERVAL_H'},
@@ -46,6 +49,8 @@ SUPPORTED = {
 }
 DOCUMENTARY = {'DESCR', 'NOTE', 'UTXT1', 'UTXT2'}
 SUPPORTED.update(SUPPORTED_OPERATIONS)
+for _table in ('SimLabWorkflow', 'SimLabWorkflowStep', 'SimLabWorkflowBinding'):
+    SUPPORTED[_table] = {f['id'] for f in TABLES[_table]}
 
 class ModelError(ValueError):
     def __init__(self, errors):
@@ -189,6 +194,8 @@ def compile_model(tables):
             'resources': requirements(val('ItemReplacement', row, 'SURPTID'), row['STID'])}
     structures, children, structure_errors = compile_structure(tables)
     errors.extend(structure_errors)
+    redundancy, redundancy_errors = compile_redundancy(tables, structures, children)
+    errors.extend(redundancy_errors)
     aging, aging_errors = compile_aging(tables, children, horizon)
     errors.extend(aging_errors)
     depot_processes = {}
@@ -285,4 +292,14 @@ def compile_model(tables):
             'planned': planned, 'aging': aging}
     if m3:
         config['m3'] = {'tables': canonical}
+    if redundancy:
+        config['redundancy'] = redundancy
+    if any(tables.get(t) for t in ('SimLabWorkflow', 'SimLabWorkflowStep', 'SimLabWorkflowBinding')):
+        workflows, workflow_errors = compile_workflows(tables, config)
+        if workflow_errors:
+            raise ModelError(workflow_errors)
+        config['workflows'] = workflows
+        workflow_errors = bind_flight_activities(config)
+        if workflow_errors:
+            raise ModelError(workflow_errors)
     return config

@@ -61,7 +61,55 @@ class MissionManager:
         self.last = self.env.now
 
     def rebalance(self):
+        if getattr(self, '_settling_dispatch', False):
+            return
+        if getattr(self, 'settle_faults', None) and not getattr(self, '_dispatching', False):
+            self.queue_dispatch()
+            return
+        self._settling_dispatch = bool(getattr(self, 'settle_faults', None))
+        try:
+            self._rebalance()
+        finally:
+            self._settling_dispatch = False
+
+    def queue_dispatch(self):
+        """Run after all ordinary same-time events, including zero-time work."""
+        if getattr(self, '_dispatch_event', None) is not None:
+            return
+        event = self.env.event()
+        event._ok, event._value = True, None
+        self._dispatch_event = event
+        def dispatch(_):
+            self._dispatch_event = None
+            self._dispatching = True
+            try:
+                self.rebalance()
+            finally:
+                self._dispatching = False
+        event.callbacks.append(dispatch)
+        self.env.schedule(event, priority=2)
+
+    def dispatch_ready(self):
+        if getattr(self, 'settle_faults', None) and self.env._queue:
+            time, priority, *_ = self.env._queue[0]
+            if time == self.env.now and priority < 2:
+                self.queue_dispatch()
+                return False
+        return True
+
+    def signal_assignments(self, before):
+        for asset in self.assets:
+            if before[asset['id']] != asset['mission']:
+                signal = asset['assignment_event']
+                asset['assignment_event'] = self.env.event()
+                if not signal.triggered:
+                    signal.succeed()
+                self.log(asset['id'], '任务分配' if asset['mission'] else '退出任务', asset['mission'] or '')
+
+    def _rebalance(self):
         self.integrate()
+        if getattr(self, 'settle_faults', None):
+            self.settle_faults()
         self.active = [t for t in self.tasks if t['start'] <= self.env.now < t['end']]
         active_ids = {t['id'] for t in self.active}
         before = {a['id']: a['mission'] for a in self.assets}
@@ -82,7 +130,7 @@ class MissionManager:
             for asset in self.assets:
                 if len(assigned) + reserved >= task['quantity']:
                     break
-                if asset['state'] == 'available' and asset['mission'] is None and asset['id'] not in self.pending and self.eligible(task, asset):
+                if asset['state'] == 'available' and not asset.get('repair_pending') and asset['mission'] is None and asset['id'] not in self.pending and self.eligible(task, asset) and self.dispatch_ready():
                     if self.env.now > task['start'] and task['relief_hours'] > 0:
                         reservation = {'task': task['id'], 'ready': self.env.now + task['relief_hours']}
                         self.pending[asset['id']] = reservation

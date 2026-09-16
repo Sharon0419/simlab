@@ -10,6 +10,7 @@ from .flight import FlightManager
 from .preventive import PreventiveClocks
 from .service import ServiceCoordinator
 from .supply import SupplyNetwork
+from .redundancy import capable, asset_capable, fault_summary
 
 
 class Exposure:
@@ -19,6 +20,7 @@ class Exposure:
         self.service, self.rng, self.failed = service, failure_rng, failed
         self.last = env.now
         self.event = env.event()
+        self.settling = False
         self.clocks = PreventiveClocks(env, parts, config['m3']['tables'])
         service.clocks, service.runtime = self.clocks, self
 
@@ -36,6 +38,8 @@ class Exposure:
                 if slot['token'] is None:
                     continue
                 root = self.parts.records[slot['token']]
+                if self.config.get('redundancy') and not capable(self.parts, root['id'], self.config['redundancy']):
+                    continue
                 specs = {p['iid']:p for p in self.parts.definitions.get(root['iid'], [])}
                 for leaf in self.parts.leaves(root['id']):
                     if leaf['broken']:
@@ -74,9 +78,33 @@ class Exposure:
             if active:
                 for slot in asset['slots']:
                     if slot['token']:
+                        if self.config.get('redundancy') and not capable(self.parts, slot['token'], self.config['redundancy']):
+                            continue
                         for record in self.service.retirement.tree(slot['token']):
-                            if not record.get('retired'):
+                            if not record.get('retired') and (not self.config.get('redundancy') or not record.get('own_broken')):
                                 yield record, asset['_fleet']['util']
+
+    def settle_faults(self):
+        if self.settling:
+            return
+        self.integrate()
+        self.settling = True
+        try:
+            if self.config.get('redundancy'):
+                # Include exhausted budgets at time zero / a landing boundary,
+                # before the dispatcher has made a new assignment.
+                due = []
+                for asset in self.assets:
+                    for slot in asset['slots']:
+                        token = slot['token']
+                        if token and capable(self.parts, token, self.config['redundancy']):
+                            due.extend((asset, slot, r['id']) for r in self.parts.leaves(token)
+                                if not r['broken'] and r['budget'] is not None and r['budget'] <= 1e-12)
+                with self.service.registration_batch():
+                    for asset, slot, leaf in due:
+                        self.failed(asset, slot, leaf)
+        finally:
+            self.settling = False
 
     def due(self):
         self.integrate()
@@ -134,6 +162,8 @@ class M3Missions(MissionManager):
 
     def rebalance(self):
         super().rebalance()
+        if self.service and self.service.config.get('redundancy'):
+            self.service.advance()
         if self.runtime:
             self.runtime.changed()
 
@@ -143,6 +173,7 @@ def run_one(config, replication=0, progress=None):
     env = simpy.Environment()
     rngs = [np.random.default_rng(np.random.SeedSequence([replication, label, config['seed']])) for label in range(5)]
     parts = AgingComponents(config.get('children', {}), config.get('aging', {}), env)
+    parts.redundancy = config.get('redundancy', {})
     assets, events, samples, failures = [], [], [], Counter()
     event_count = 0
     manager = runtime = None
@@ -182,8 +213,14 @@ def run_one(config, replication=0, progress=None):
         failures[parts.records[leaf]['iid']] += 1
         log(asset['id'], '发生故障', parts.records[leaf]['iid'])
         service.corrective(asset, slot)
-        if isinstance(manager, FlightManager) and asset['mission'] is not None:
+        if config.get('redundancy'):
+            log(asset['id'], '冗余组状态', fault_summary(parts, asset, config['redundancy']))
+        lost = not config.get('redundancy') or not asset_capable(parts, asset, config['redundancy'])
+        if isinstance(manager, FlightManager) and asset['mission'] is not None and lost:
             state(asset, 'returning_failed')
+        elif config.get('redundancy') and asset['mission'] is not None and lost:
+            state(asset, 'waiting_resource')
+            service.advance()
 
     runtime = Exposure(env, config, parts, assets, service, rngs[0], failed)
     if config['missions']:
@@ -200,6 +237,8 @@ def run_one(config, replication=0, progress=None):
             manager = M3Missions(env, config['missions'], assets, log)
             manager.runtime, manager.service = runtime, service
         service.manager = manager
+        if config.get('redundancy'):
+            manager.settle_faults = runtime.settle_faults
     initial = len(parts.records)
     initial_by_item = dict(Counter(r['iid'] for r in parts.records.values()))
     supply.start()
@@ -222,6 +261,7 @@ def run_one(config, replication=0, progress=None):
     env.run(until=config['horizon'])
     runtime.integrate()
     if manager:
+        manager._dispatching = True
         manager.rebalance()
     samples.append(sample())
     totals = Counter()

@@ -1,5 +1,6 @@
 """Physical identities, assembly slots and persistent leaf failure budgets."""
 from collections import Counter
+from .redundancy import capable
 
 
 class Components:
@@ -7,6 +8,7 @@ class Components:
         self.definitions = definitions
         self.records = {}
         self.locations = {}
+        self.redundancy = {}
 
     def create(self, iid, location, site=''):
         name = f'{iid}#{len(self.records)+1}'
@@ -49,12 +51,14 @@ class Components:
     def fail(self, parent, leaf):
         assert leaf == parent or self.records[leaf]['parent'] == parent
         self.records[leaf]['broken'] = True
+        self.records[leaf]['own_broken'] = True
         self.records[parent]['broken'] = True
 
     def restore(self, part):
         r = self.records[part]
         assert all(c is not None and not self.records[c]['broken'] for c in r['children'])
         r['broken'] = False
+        r['own_broken'] = False
         if not r['children']:
             r['budget'] = None
 
@@ -90,6 +94,8 @@ class Components:
     def failure(self, env, asset, fleet, rng, mission_mode, stop_on_landing=False):
         leaves = []
         for slot in asset['slots']:
+            if slot['token'] is None or (self.redundancy and not capable(self, slot['token'], self.redundancy)):
+                continue
             parent = self.records[slot['token']]
             if parent['children']:
                 specs = {p['iid']: p for p in self.definitions[parent['iid']]}

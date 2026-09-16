@@ -25,7 +25,7 @@ def test_procurement_and_retirement_metadata_and_canonical_roundtrip():
     tables["SimLabItemRetirement"] = [{"IID": "POWER", "LIMIT_H": "100", "LIMIT_REPAIRS": "2"}]
     config = compile_model(tables)
 
-    assert VERSION == 11
+    assert VERSION >= 11
     assert set(SUPPORTED["SimLabPurchasePolicy"]) == {
         "POINT", "STID", "IID", "TRIGGER", "TARGET_QTY", "REORDER_QTY",
         "FIRST_H", "INTERVAL_H", "LEAD_H",

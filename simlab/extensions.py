@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 11
+VERSION = 12
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):
@@ -16,6 +16,16 @@ TABLES = {'SimLabDepotProcess': [
     field('TEST_H', 'Mandatory', '修后测试时间 / 小时', 'Floating point', unit='Hours'),
     field('TEST_TASK', 'Regular', '测试任务与资源', references='Tasks TID'),
 ]}
+
+from .workflow_schema import workflow_tables
+TABLES.update(workflow_tables(field))
+
+TABLES['SimLabRedundancy'] = [
+    field('PARENT', 'Index', '直接父项标识', references='System SID, Item IID'),
+    field('IID', 'Index', '同型号子项组', references='Item IID'),
+    field('K', 'Mandatory', '最低可用数量；n取自装备结构', 'Integer'),
+]
+TABLES['SimLabRedundancy'][2]['constraints'] = 'Positive integer'
 
 TABLES['SimLabDutyRule'] = [
     field('MTID', 'Index', '值守任务类型（SimLab 扩展）', references='MissionType MTID'),

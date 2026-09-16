@@ -12,6 +12,7 @@ from .flight import FlightManager
 from .components import Components
 from .aging_components import AgingComponents
 from .maintenance import Workshop, aggregate as aggregate_maintenance
+from .redundancy import asset_capable, fault_summary, RedundantExposure
 
 STATES = {'available': '可用', 'waiting_spare': '等待备件',
           'planned_wait': '计划维修等待资源', 'planned_maintenance': '计划维修作业',
@@ -97,9 +98,11 @@ def run_one(config, replication=0, progress=None):
     replace_rng = np.random.default_rng(np.random.SeedSequence([replication, 2, config['seed']]))
     pool = ResourcePool(env, config['capacity'], config.get('schedules'))
     mission_manager = None
-    aging_enabled = bool(config.get('aging'))
-    components = (AgingComponents(config.get('children', {}), config['aging'], env)
+    redundant_clock = None
+    aging_enabled = bool(config.get('aging') or config.get('redundancy'))
+    components = (AgingComponents(config.get('children', {}), config.get('aging', {}), env)
                   if aging_enabled else Components(config.get('children', {})))
+    components.redundancy = config.get('redundancy', {})
     stores, locations, assets, events, samples = {}, components.locations, [], [], []
     failures = Counter()
     event_count = 0
@@ -119,11 +122,15 @@ def run_one(config, replication=0, progress=None):
         mean = spec['mean']
         return float(rng.exponential(mean)) if spec['random'] and mean else mean
     def state(asset, next_state):
+        if redundant_clock:
+            redundant_clock.integrate()
         asset['times'][asset['state']] += env.now - asset['last']
         asset['last'] = env.now
         asset['state'] = next_state
         if mission_manager:
             mission_manager.rebalance()
+        if redundant_clock:
+            redundant_clock.changed()
     workshop = Workshop(env, config, components, pool, store, repair_rng, log) if config.get('children') else None
     def repair(fleet, iid, part):
         if workshop:
@@ -183,6 +190,9 @@ def run_one(config, replication=0, progress=None):
             log(slot['token'], '故障叶子', leaf)
 
     def operate(asset, fleet):
+        if config.get('redundancy'):
+            yield from operate_redundant(asset, fleet)
+            return
         rates = np.array([p['rate'] * fleet['util'] for p in asset['slots']], dtype=float)
         total = float(rates.sum())
         if total == 0 and not aging_enabled:
@@ -228,6 +238,33 @@ def run_one(config, replication=0, progress=None):
                 yield from repair_slot(asset,fleet,broken_slot)
             state(asset, 'available')
             log(asset['id'], '恢复可用', ','.join(s['iid'] for s in pending_slots))
+
+    def operate_redundant(asset, fleet):
+        while True:
+            if not asset['_pending_repairs']:
+                yield asset['_fault_event']
+            while asset['mission'] is not None:
+                yield asset['assignment_event']
+            pending = asset['_pending_repairs']
+            for slot in pending:
+                yield from repair_slot(asset, fleet, slot)
+            asset['_pending_repairs'] = []
+            asset['_fault_event'] = env.event()
+            asset.pop('repair_pending', None)
+            state(asset, 'available')
+            log(asset['id'], '恢复可用', ','.join(s['iid'] for s in pending))
+
+    def redundant_failed(asset, slot, leaf):
+        record_failure(asset, slot, leaf)
+        asset['repair_pending'] = True
+        if slot not in asset['_pending_repairs']:
+            asset['_pending_repairs'].append(slot)
+        if not asset['_fault_event'].triggered:
+            asset['_fault_event'].succeed()
+        log(asset['id'], '冗余组状态', fault_summary(components, asset, config['redundancy']))
+        if asset['mission'] is None or not asset_capable(components, asset, config['redundancy']):
+            state(asset, 'returning_failed' if isinstance(mission_manager, FlightManager)
+                  and asset['mission'] is not None else 'waiting_resource')
     for fleet in config['fleets']:
         for index in range(fleet['quantity']):
             slots = []
@@ -239,10 +276,17 @@ def run_one(config, replication=0, progress=None):
                      'sid': fleet['sid'], 'unit': fleet['unit'], 'home': fleet['home'],
                      'mission': None, 'assignment_event': env.event()}
             assets.append(asset)
+            if config.get('redundancy'):
+                asset.update(_fleet=fleet, _pending_repairs=[], _fault_event=env.event())
             env.process(operate(asset, fleet))
+    if config.get('redundancy'):
+        redundant_clock = RedundantExposure(env, config, components, assets, failure_rng, redundant_failed)
+        env.process(redundant_clock.run())
     if config.get('missions'):
         def planned_state(asset, next_state):
             # Called within rebalance: integrate equipment state without recursion.
+            if redundant_clock:
+                redundant_clock.integrate()
             asset['times'][asset['state']] += env.now-asset['last']
             asset['last'] = env.now
             asset['state'] = next_state
@@ -250,6 +294,14 @@ def run_one(config, replication=0, progress=None):
         mission_manager = (manager_type(env, config['missions'], assets, log, resource_pool=pool,
                            planned_rules=config.get('planned', ()), set_state=planned_state)
                            if manager_type is FlightManager else manager_type(env, config['missions'], assets, log))
+        if redundant_clock:
+            mission_manager.settle_faults = redundant_clock.settle_faults
+            # Both assignment and completion wake the physical operating clock.
+            original_rebalance = mission_manager.rebalance
+            def rebalance_redundant():
+                original_rebalance()
+                redundant_clock.changed()
+            mission_manager.rebalance = rebalance_redundant
     initial_parts = len(locations)
     initial_by_item = dict(Counter(r['iid'] for r in components.records.values()))
     def observe():
@@ -265,9 +317,12 @@ def run_one(config, replication=0, progress=None):
             yield env.timeout(config['interval'])
     env.process(observe())
     env.run(until=config['horizon'])
+    if redundant_clock:
+        redundant_clock.integrate()
     if aging_enabled:
         components.finish_ages()
     if mission_manager:
+        mission_manager._dispatching = True
         mission_manager.rebalance()
     sample = {'time': env.now, 'available': sum(a['state'] == 'available' for a in assets) / len(assets)}
     if mission_manager:
@@ -385,7 +440,7 @@ def simulate(tables, progress=None):
             mission['tasks'].append(task)
     if progress:
         progress(1.0)
-    result = {**({'aging': results[0]['aging']} if config.get('aging') or config.get('m3') else {}),
+    result = {**({'aging': results[0]['aging']} if config.get('aging') or config.get('m3') or config.get('redundancy') else {}),
             'engine': __version__, 'created': now(), 'model_hash': model_hash(tables),
             'maintenance': aggregate_maintenance(results) if config.get('children') and not config.get('m3') else None,
             **({'supply': results[0]['supply'], 'service': results[0]['service']} if config.get('m3') else {}),
@@ -415,4 +470,9 @@ def simulate(tables, progress=None):
             '叶子实物日历/有效运行预防时钟独立；库存和在途日历到期隔离，预防完成修复如新并保留终身小时。'
             '空中预防到期不单独中止；落地与整机计划维修、飞行检查共享串行地面队列，清空后统一准备。'
             '资源组合原子申请，班内启动、跨班继续；期末未完订单和作业保留。供应与服务顶层明细取首轮，各轮明细另列。')
+    if config.get('redundancy'):
+        result['assumptions'] = ('本项目启用同父项同型号n中取k，取代下述串联/任一故障中止假设：'
+            '各型号组分别满足k；仍具工作能力的部件全部运行；在途仍满足能力继续任务，低于阈值返航；'
+            '全部实物故障落地后维修，等待及作业期间禁止新任务；同刻故障与修复先结算再派遣。'
+            + result['assumptions'])
     return result

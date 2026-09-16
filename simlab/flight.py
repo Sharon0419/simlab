@@ -124,8 +124,10 @@ class FlightManager(MissionManager):
         if asset['prep_deadline'] == deadline:
             self.rebalance()
 
-    def rebalance(self):
+    def _rebalance(self):
         self.integrate()
+        if getattr(self, 'settle_faults', None):
+            self.settle_faults()
         if self.ground:self.ground.advance()
         before = {a['id']: a['mission'] for a in self.assets}
         # Complete flights before considering failures at their exact end boundary.
@@ -188,6 +190,8 @@ class FlightManager(MissionManager):
             pool = self.pool_for(a)
             if pool is None or a['mission'] is not None:
                 continue
+            if a.get('repair_pending'):
+                continue
             if (getattr(self, 'm3_service', None) and self.m3_service.blocked(a)) or (self.planned and self.planned.blocked(a)):
                 continue
             if a['state'] != 'available':
@@ -202,10 +206,17 @@ class FlightManager(MissionManager):
                 self.prepare(a, pool)
             if a['flight_phase']=='ready':a.pop('post_planned',None)
         self.active = [t for t in self.tasks if t['start'] <= self.env.now < t['end']]
+        if getattr(self, 'settle_faults', None):
+            self.signal_assignments(before)
+            before = {a['id']: a['mission'] for a in self.assets}
+        dispatch_ready = self.dispatch_ready()
         for t in sorted(self.active, key=lambda x:(x['start'],x['id'])):
             if t['flight_status'] != 'scheduled':
                 continue
+            if not dispatch_ready:
+                continue
             candidates = sorted([a for a in self.assets if self.eligible(t,a) and a['state']=='available'
+                                 and not a.get('repair_pending')
                                  and a['mission'] is None and a['flight_phase']=='ready'
                                  and not (self.planned and self.planned.blocked(a))
                                  and not (getattr(self, 'm3_service', None) and self.m3_service.blocked(a))],

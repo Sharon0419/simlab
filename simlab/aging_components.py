@@ -3,6 +3,7 @@ import math
 
 from .components import Components
 from .aging import remaining_age, risk_increment
+from .redundancy import capable
 
 
 class AgingComponents(Components):
@@ -62,6 +63,7 @@ class AgingComponents(Components):
         before = record['age']
         perfect = kind == 'PREVENTIVE' or self.rules.get(record['iid'], {}).get('repair', 'PERFECT') == 'PERFECT'
         record['broken'] = False
+        record['own_broken'] = False
         record['budget'] = None
         if perfect:
             record['age'] = 0.
@@ -104,6 +106,8 @@ class AgingComponents(Components):
     def failure(self, env, asset, fleet, rng, mission_mode, stop_on_landing=False):
         leaves = []
         for slot in asset['slots']:
+            if slot['token'] is None or (self.redundancy and not capable(self, slot['token'], self.redundancy)):
+                continue
             parent = self.records[slot['token']]
             specs = {p['iid']: p for p in self.definitions.get(parent['iid'], [])}
             for record in self.leaves(parent['id']):

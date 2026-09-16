@@ -88,6 +88,8 @@ class ServiceCoordinator:
         if old:
             return old
         job = self.create_job(part, 'CORRECTIVE', asset['sid'], asset['home'], asset, slot)
+        if self.config.get('redundancy'):
+            asset['repair_pending'] = True
         self.advance()
         return job
 
@@ -150,7 +152,7 @@ class ServiceCoordinator:
             return False
         asset = job['_asset']
         if asset:
-            if asset['mission'] is not None and self.manager and hasattr(self.manager, 'ground'):
+            if asset['mission'] is not None and self.manager and (hasattr(self.manager, 'ground') or self.config.get('redundancy')):
                 return False
             if asset['state'] in ('planned_wait', 'planned_maintenance'):
                 return False
@@ -416,6 +418,7 @@ class ServiceCoordinator:
         if asset:
             # No dispatch or preparation between consecutive ground work items.
             if not self.blocked(asset):
+                asset.pop('repair_pending', None)
                 asset.update(flight_phase='idle', prep_deadline=None, post_planned=True)
                 self.set_state(asset, 'available')
         roots = {self.root(job['part'])}
