@@ -1,4 +1,5 @@
 """Strict, documented execution subset of the full editable schema."""
+import copy
 import math
 from .schema import TABLES, value, effective
 from .validation import validate
@@ -6,8 +7,19 @@ from .operations import SUPPORTED_OPERATIONS, compile_operations
 from .hierarchy import compile_structure
 from .planned import compile_planned
 from .aging import compile_aging
+from .supply_config import M3_TABLES, compile_supply
+from .service_config import compile_service
 
 SUPPORTED = {
+    'SimLabExecution': {'MODE'},
+    'SimLabSupplyRoute': {'ROUTEID', 'IID', 'FROM_STID', 'TO_STID', 'TRANSIT_H'},
+    'SimLabSupplyPolicy': {'POINT', 'STID', 'IID', 'TRIGGER', 'TARGET_QTY', 'REORDER_QTY', 'FIRST_H', 'INTERVAL_H'},
+    'SimLabRepairLocation': {'IID', 'FROM_STID', 'REPAIR_STID'},
+    'SimLabServiceRoute': {'ROUTEID', 'IID', 'FROM_STID', 'TO_STID', 'TRANSIT_H'},
+    'SimLabMaintenanceRule': {'RULEID', 'MID', 'IID', 'STID', 'KIND', 'METHOD', 'REPLACE_P'},
+    'SimLabMaintenanceStep': {'RULEID', 'STEP', 'DURATION_H', 'DISTRIBUTION', 'TASK'},
+    'SimLabOffItemService': {'IID', 'STID', 'KIND', 'STEP', 'DURATION_H', 'DISTRIBUTION', 'TASK'},
+    'SimLabItemPreventive': {'PMID', 'IID', 'CLOCK', 'INTERVAL_H', 'INITIAL_H'},
     'SimLabItemAging': {'IID', 'SHAPE', 'SCALE_H', 'INITIAL_H', 'REPAIR'},
     'SimLabFlightInspection': {'CHECKID', 'SID', 'USTID', 'INTERVAL_H', 'DURATION_H', 'TASK'},
     'SimLabInspectionInitial': {'CHECKID', 'ASSET_NO', 'INITIAL_H'},
@@ -46,13 +58,16 @@ def equal(a, b):
     except (ValueError, TypeError):
         return False
 
-def capability_errors(tables):
+def capability_errors(tables, m3=False):
     errors = []
     for name, rows in tables.items():
         if not rows:
             continue
         if name not in SUPPORTED:
             errors.append(f'{name}: 支持建模与交换，当前引擎尚不支持计算此表。')
+            continue
+        if name in M3_TABLES and name != 'SimLabExecution' and not m3:
+            errors.append(f'{name}: 仅在 SimLabExecution.MODE=M3 时支持计算。')
             continue
         for i, row in enumerate(rows, 1):
             for field in TABLES[name]:
@@ -67,10 +82,20 @@ def capability_errors(tables):
     return errors
 
 def compile_model(tables):
+    execution = tables.get('SimLabExecution', []) if isinstance(tables, dict) else []
+    m3 = len(execution) == 1 and isinstance(execution[0], dict) and execution[0].get('MODE') == 'M3'
+    # The original dictionary makes these two legacy transport fields mandatory.
+    # M3 replaces them with explicit routes, so omitted values canonically mean zero.
+    candidate = copy.deepcopy(tables)
+    if m3:
+        for row in candidate.get('StationStructure', []):
+            row.setdefault('TFRMS', '0')
+            row.setdefault('TTOMS', '0')
+    tables = candidate
     errors = validate(tables)
     if errors:
         raise ModelError(errors)
-    errors = capability_errors(tables)
+    errors = capability_errors(tables, m3)
     if errors:
         raise ModelError(errors)
     def rows(t): return tables.get(t, [])
@@ -109,17 +134,22 @@ def compile_model(tables):
     for rid, row in resources.items():
         if val('Resource', row, 'TYPE') != 'SPECIAL':
             errors.append(f'Resource.{rid}: 本版支持固定数量 SPECIAL 资源。')
-    links = {}
-    for row in rows('StationStructure'):
-        child, parent = row['STID'], row['MSTID']
-        if child in links:
-            errors.append(f'StationStructure.{child}: 本版仅支持一个上级站点。')
-        links[child] = {'parent': parent, 'inward': num('StationStructure', row, 'TFRMS'),
-                        'outward': num('StationStructure', row, 'TTOMS')}
-    for child, link in links.items():
-        if child == link['parent'] or link['parent'] in links:
-            errors.append(f'StationStructure.{child}: 本版支持两级无环保障网络。')
     point = val('Control', c, 'APID')
+    canonical = None
+    if m3:
+        canonical, links, _, supply_errors = compile_supply(tables, point, horizon)
+        errors.extend(supply_errors)
+    else:
+        links = {}
+        for row in rows('StationStructure'):
+            child, parent = row['STID'], row['MSTID']
+            if child in links:
+                errors.append(f'StationStructure.{child}: 本版仅支持一个上级站点。')
+            links[child] = {'parent': parent, 'inward': num('StationStructure', row, 'TFRMS'),
+                            'outward': num('StationStructure', row, 'TTOMS')}
+        for child, link in links.items():
+            if child == link['parent'] or link['parent'] in links:
+                errors.append(f'StationStructure.{child}: 本版支持两级无环保障网络。')
     stock = {}
     for row in rows('StockAllocation'):
         if row['POINT'] == point:
@@ -183,18 +213,24 @@ def compile_model(tables):
         if util > 1:
             errors.append('SystemDeployment.UTIL: OPHOURS 本版要求使用率在 0 至 1 之间。')
         root = links.get(home, {}).get('parent', home)
+        if m3:
+            seen = set()
+            while root in links and root not in seen:
+                seen.add(root)
+                root = links[root]['parent']
         for part in structures.get(sid, []):
             iid = part['iid']
-            if iid in children:
-                if (root, iid) not in depot_processes:
-                    errors.append(f'SimLabDepotProcess: 缺少 {iid}@{root} 的检测与测试工序。')
-                for child in children[iid]:
-                    if (root, child['iid']) not in repairs or (iid, child['iid'], root) not in replacements:
-                        errors.append(f'SRU {child["iid"]}@{root}: 缺少直接修复或父 LRU 内部更换规则。')
-            elif (root, iid) not in repairs:
-                errors.append(f'ItemRepair: 缺少 {iid} 在 {root} 的直接修复规则。')
-            if (sid, iid, home) not in replacements:
-                errors.append(f'ItemReplacement: 缺少 {sid}/{iid} 在 {home} 的更换规则。')
+            if not m3:
+                if iid in children:
+                    if (root, iid) not in depot_processes:
+                        errors.append(f'SimLabDepotProcess: 缺少 {iid}@{root} 的检测与测试工序。')
+                    for child in children[iid]:
+                        if (root, child['iid']) not in repairs or (iid, child['iid'], root) not in replacements:
+                            errors.append(f'SRU {child["iid"]}@{root}: 缺少直接修复或父 LRU 内部更换规则。')
+                elif (root, iid) not in repairs:
+                    errors.append(f'ItemRepair: 缺少 {iid} 在 {root} 的直接修复规则。')
+                if (sid, iid, home) not in replacements:
+                    errors.append(f'ItemReplacement: 缺少 {sid}/{iid} 在 {home} 的更换规则。')
         fleets.append({'sid': sid, 'home': home, 'unit': location, 'root': root,
                        'quantity': int(num('SystemDeployment', row, 'QTYPS')), 'util': util,
                        'parts': structures.get(sid, [])})
@@ -231,13 +267,20 @@ def compile_model(tables):
         tables, fleets, capacity, repairs, replacements, horizon, reps,
         [(station, rule) for (station, _), stages in depot_processes.items() for rule in stages.values()])
     errors.extend(operation_errors)
+    if m3:
+        errors.extend(compile_service(
+            tables, canonical, children, fleets, capacity, tasks,
+            repairs, replacements, depot_processes, schedules, horizon))
     planned, planned_errors = compile_planned(tables, fleets, missions, capacity, schedules, horizon, reps)
     errors.extend(planned_errors)
     if errors:
         raise ModelError(errors)
-    return {'horizon': horizon, 'interval': interval, 'replications': reps, 'seed': seed,
+    config = {'horizon': horizon, 'interval': interval, 'replications': reps, 'seed': seed,
             'remove_fraction': num('Control', c, 'RMVFR'), 'log': val('Control', c, 'ENLOG') == 'Y',
             'point': point, 'fleets': fleets, 'count': count, 'links': links, 'stock': stock,
             'capacity': capacity, 'repairs': repairs, 'replacements': replacements,
             'missions': missions, 'schedules': schedules, 'children': children, 'depot_processes': depot_processes,
             'planned': planned, 'aging': aging}
+    if m3:
+        config['m3'] = {'tables': canonical}
+    return config

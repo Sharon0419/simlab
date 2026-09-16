@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 9
+VERSION = 10
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):
@@ -66,3 +66,87 @@ TABLES['SimLabItemAging'] = [
     field('REPAIR', 'Regular', '故障维修后的年龄处理方式', default='PERFECT'),
 ]
 TABLES['SimLabItemAging'][-1]['constraints'] = 'Multiple choice: PERFECT, MINIMAL'
+
+TABLES['SimLabExecution'] = [
+    field('MODE', 'Index', '执行模式'),
+]
+TABLES['SimLabExecution'][0]['constraints'] = 'Multiple choice: M3'
+
+TABLES['SimLabSupplyRoute'] = [
+    field('ROUTEID', 'Index', '补给路线标识'),
+    field('IID', 'Mandatory', '部件标识', references='Item IID'),
+    field('FROM_STID', 'Mandatory', '供货站点', references='Station STID'),
+    field('TO_STID', 'Mandatory', '收货站点', references='Station STID'),
+    field('TRANSIT_H', 'Mandatory', '固定运输时长', 'Floating point', unit='Hours'),
+]
+
+TABLES['SimLabSupplyPolicy'] = [
+    field('POINT', 'Index', '配置方案'),
+    field('STID', 'Index', '库存站点', references='Station STID'),
+    field('IID', 'Index', '部件标识', references='Item IID'),
+    field('TRIGGER', 'Mandatory', '补货触发方式'),
+    field('TARGET_QTY', 'Mandatory', '目标库存位置', 'Integer'),
+    field('REORDER_QTY', 'Regular', '临界库存位置', 'Integer'),
+    field('FIRST_H', 'Regular', '首次周期触发时刻', 'Floating point', '0', unit='Hours'),
+    field('INTERVAL_H', 'Regular', '周期触发间隔', 'Floating point', unit='Hours'),
+]
+TABLES['SimLabSupplyPolicy'][3]['constraints'] = 'Multiple choice: THRESHOLD, PERIODIC'
+
+TABLES['SimLabRepairLocation'] = [
+    field('IID', 'Index', '部件标识', references='Item IID'),
+    field('FROM_STID', 'Index', '实际拆卸站点', references='Station STID'),
+    field('REPAIR_STID', 'Mandatory', '指定维修站点', references='Station STID'),
+]
+
+TABLES['SimLabServiceRoute'] = [
+    field('ROUTEID', 'Index', '送修路线标识'),
+    field('IID', 'Mandatory', '部件标识', references='Item IID'),
+    field('FROM_STID', 'Mandatory', '送出站点', references='Station STID'),
+    field('TO_STID', 'Mandatory', '接收维修站点', references='Station STID'),
+    field('TRANSIT_H', 'Mandatory', '固定送修时长', 'Floating point', unit='Hours'),
+]
+
+TABLES['SimLabMaintenanceRule'] = [
+    field('RULEID', 'Index', '维修规则标识'),
+    field('MID', 'Mandatory', '直接母项标识', references='System SID, Item IID'),
+    field('IID', 'Mandatory', '叶子部件标识', references='Item IID'),
+    field('STID', 'Mandatory', '实际作业站点', references='Station STID'),
+    field('KIND', 'Mandatory', '维修类别'),
+    field('METHOD', 'Mandatory', '维修方式'),
+    field('REPLACE_P', 'Regular', '选择换件方式的概率', 'Floating point'),
+]
+TABLES['SimLabMaintenanceRule'][4]['constraints'] = 'Multiple choice: CORRECTIVE, PREVENTIVE'
+TABLES['SimLabMaintenanceRule'][5]['constraints'] = 'Multiple choice: IN_PLACE, REPLACE, MIXED'
+TABLES['SimLabMaintenanceRule'][6]['constraints'] = '0.0 <= number <= 1.0'
+
+TABLES['SimLabMaintenanceStep'] = [
+    field('RULEID', 'Index', '维修规则标识', references='SimLabMaintenanceRule RULEID'),
+    field('STEP', 'Index', '维修工序'),
+    field('DURATION_H', 'Mandatory', '工序时长', 'Floating point', unit='Hours'),
+    field('DISTRIBUTION', 'Regular', '时长分布', default='FIXED'),
+    field('TASK', 'Regular', '资源作业', references='Tasks TID'),
+]
+TABLES['SimLabMaintenanceStep'][1]['constraints'] = 'Multiple choice: DIAGNOSE, IN_PLACE, REMOVE, INSTALL, TEST'
+TABLES['SimLabMaintenanceStep'][3]['constraints'] = 'Multiple choice: FIXED, EXPONENTIAL'
+
+TABLES['SimLabOffItemService'] = [
+    field('IID', 'Index', '叶子部件标识', references='Item IID'),
+    field('STID', 'Index', '维修站点', references='Station STID'),
+    field('KIND', 'Index', '维修类别'),
+    field('STEP', 'Index', '拆下件作业工序'),
+    field('DURATION_H', 'Mandatory', '工序时长', 'Floating point', unit='Hours'),
+    field('DISTRIBUTION', 'Regular', '时长分布', default='FIXED'),
+    field('TASK', 'Regular', '资源作业', references='Tasks TID'),
+]
+TABLES['SimLabOffItemService'][2]['constraints'] = 'Multiple choice: CORRECTIVE, PREVENTIVE'
+TABLES['SimLabOffItemService'][3]['constraints'] = 'Multiple choice: DIAGNOSE, SERVICE, TEST'
+TABLES['SimLabOffItemService'][5]['constraints'] = 'Multiple choice: FIXED, EXPONENTIAL'
+
+TABLES['SimLabItemPreventive'] = [
+    field('PMID', 'Index', '部件预防维修标识'),
+    field('IID', 'Mandatory', '叶子部件标识', references='Item IID'),
+    field('CLOCK', 'Mandatory', '预防维修计时方式'),
+    field('INTERVAL_H', 'Mandatory', '预防维修周期', 'Floating point', unit='Hours'),
+    field('INITIAL_H', 'Regular', '初始周期已用时长', 'Floating point', '0', unit='Hours'),
+]
+TABLES['SimLabItemPreventive'][2]['constraints'] = 'Multiple choice: CALENDAR, OPERATING'

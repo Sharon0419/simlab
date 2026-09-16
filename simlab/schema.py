@@ -6,6 +6,11 @@ from .extensions import TABLES as EXTENSION_TABLES
 SCHEMA = json.loads((Path(__file__).parent / 'data' / 'schema.json').read_text(encoding='utf-8'))
 TABLES = {**SCHEMA['tables'], **EXTENSION_TABLES}
 TABLE_LABELS = {
+    'SimLabExecution': '执行模式',
+    'SimLabSupplyRoute': '补给路线', 'SimLabSupplyPolicy': '库存补货策略',
+    'SimLabRepairLocation': '维修地点映射', 'SimLabServiceRoute': '送修路线',
+    'SimLabMaintenanceRule': '维修方式规则', 'SimLabMaintenanceStep': '在位维修工序',
+    'SimLabOffItemService': '拆下件维修工序', 'SimLabItemPreventive': '部件预防维修时钟',
     'SimLabItemAging': '部件老化与修复',
     'SimLabFlightInspection': '飞行小时检查', 'SimLabInspectionInitial': '逐架初始检查小时',
     'SimLabPlannedMaintenance': '日历计划维修',
@@ -35,6 +40,12 @@ TABLE_LABELS = {
     'IntegerDistributions': '整数分布', 'UnitGroup': '使用单位组', 'MaintenanceAllocation': '维修配置',
 }
 FIELD_LABELS = {
+    'MODE': '执行模式', 'ROUTEID': '路线标识', 'FROM_STID': '起点站点',
+    'TO_STID': '终点站点', 'TRANSIT_H': '运输时长', 'TRIGGER': '触发方式',
+    'TARGET_QTY': '目标库存位置', 'REORDER_QTY': '临界库存位置',
+    'REPAIR_STID': '维修站点', 'RULEID': '维修规则标识', 'KIND': '维修类别',
+    'METHOD': '维修方式', 'REPLACE_P': '换件概率', 'STEP': '工序',
+    'DISTRIBUTION': '时长分布', 'CLOCK': '计时方式',
     'SHAPE': '寿命形状参数', 'SCALE_H': '寿命尺度小时', 'REPAIR': '修复年龄方式',
     'CHECKID': '飞行小时检查标识', 'ASSET_NO': '飞机序号', 'INITIAL_H': '初始已飞小时',
     'PMID': '计划维修标识', 'FIRST_H': '首次到期时刻', 'INTERVAL_H': '重复间隔',
@@ -117,11 +128,11 @@ def value(table, row, column, fallback=''):
 
 # Workflow order applies to navigation only; the original dictionary is unchanged.
 MODELING_GROUPS = {
-    '01  装备组成': ('System', 'Item', 'MaterielStructure', 'SimLabItemAging'),
+    '01  装备组成': ('System', 'Item', 'MaterielStructure', 'SimLabItemAging', 'SimLabItemPreventive'),
     '02  站点与部署': ('Station', 'StationStructure', 'Unit', 'SystemDeployment'),
     '03  资源与班次': ('Resource', 'Shift', 'ShiftProfile', 'ResourceStationData', 'ResourceAllocation'),
-    '04  维修与保障作业': ('Tasks', 'TaskResource', 'ItemRepair', 'ItemReplacement', 'SimLabDepotProcess', 'SimLabPlannedMaintenance', 'SimLabFlightInspection', 'SimLabInspectionInitial'),
-    '05  备件与供应': ('StockAllocation',),
+    '04  维修与保障作业': ('Tasks', 'TaskResource', 'ItemRepair', 'ItemReplacement', 'SimLabDepotProcess', 'SimLabMaintenanceRule', 'SimLabMaintenanceStep', 'SimLabOffItemService', 'SimLabRepairLocation', 'SimLabServiceRoute', 'SimLabPlannedMaintenance', 'SimLabFlightInspection', 'SimLabInspectionInitial'),
+    '05  备件与供应': ('StockAllocation', 'SimLabSupplyRoute', 'SimLabSupplyPolicy'),
     '06  任务与运行': ('MissionType', 'MissionSystem', 'OperationProfile', 'Operations', 'SimLabDutyRule', 'SimLabFlightRule'),
-    '07  仿真控制': ('Control',),
+    '07  仿真控制': ('Control', 'SimLabExecution'),
 }

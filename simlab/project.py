@@ -106,7 +106,7 @@ def load_project(path):
 
 def export_package(project, destination, include_results=True):
     snapshot = copy.deepcopy(project)
-    if snapshot.get('extensions_version', 1) in (1, 2, 3, 4, 5):
+    if snapshot.get('extensions_version', 1) in tuple(range(1, EXTENSIONS_VERSION)):
         snapshot['extensions_version'] = EXTENSIONS_VERSION
     if not include_results:
         snapshot['runs'] = []
