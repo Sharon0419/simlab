@@ -1,0 +1,382 @@
+{
+  "System": [
+    {
+      "SID": "AIRCRAFT",
+      "DESCR": "飞机：4类关键组件，随机故障与修复",
+      "FRT": "0"
+    }
+  ],
+  "Item": [
+    {
+      "IID": "POWERPLANT",
+      "TYPE": "LRU",
+      "DESCR": "动力组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    },
+    {
+      "IID": "AVIONICS",
+      "TYPE": "LRU",
+      "DESCR": "航电组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    },
+    {
+      "IID": "ELECTRICAL",
+      "TYPE": "LRU",
+      "DESCR": "电源组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    },
+    {
+      "IID": "HYDRAULIC",
+      "TYPE": "LRU",
+      "DESCR": "液压组件",
+      "FRT": "2500",
+      "OPID": "OPHOURS",
+      "CRIT": "1",
+      "AFFRT": "1"
+    }
+  ],
+  "MaterielStructure": [
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "POWERPLANT",
+      "QTYPM": "1",
+      "ENVF": "1"
+    },
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "AVIONICS",
+      "QTYPM": "1",
+      "ENVF": "1"
+    },
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "ELECTRICAL",
+      "QTYPM": "1",
+      "ENVF": "1"
+    },
+    {
+      "MMID": "AIRCRAFT",
+      "MID": "HYDRAULIC",
+      "QTYPM": "1",
+      "ENVF": "1"
+    }
+  ],
+  "Station": [
+    {
+      "STID": "AIRPORT",
+      "TYPE": "OP",
+      "DESCR": "机场"
+    }
+  ],
+  "Unit": [
+    {
+      "UNID": "FLIGHT_POOL",
+      "STID": "AIRPORT",
+      "DESCR": "12架已保障共同选机池"
+    }
+  ],
+  "SystemDeployment": [
+    {
+      "SID": "AIRCRAFT",
+      "USTID": "FLIGHT_POOL",
+      "QTYPS": "12",
+      "UTIL": "1"
+    }
+  ],
+  "StockAllocation": [
+    {
+      "POINT": "AIRCASE",
+      "IID": "POWERPLANT",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "AIRCASE",
+      "IID": "AVIONICS",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "AIRCASE",
+      "IID": "ELECTRICAL",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    },
+    {
+      "POINT": "AIRCASE",
+      "IID": "HYDRAULIC",
+      "STID": "AIRPORT",
+      "STSIZ": "0"
+    }
+  ],
+  "ItemRepair": [
+    {
+      "IID": "POWERPLANT",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    },
+    {
+      "IID": "AVIONICS",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    },
+    {
+      "IID": "ELECTRICAL",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    },
+    {
+      "IID": "HYDRAULIC",
+      "STID": "AIRPORT",
+      "DIRPT": "2",
+      "DIRPD": "<EXP>",
+      "SURPT": "0"
+    }
+  ],
+  "ItemReplacement": [
+    {
+      "MID": "AIRCRAFT",
+      "IID": "POWERPLANT",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    },
+    {
+      "MID": "AIRCRAFT",
+      "IID": "AVIONICS",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    },
+    {
+      "MID": "AIRCRAFT",
+      "IID": "ELECTRICAL",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    },
+    {
+      "MID": "AIRCRAFT",
+      "IID": "HYDRAULIC",
+      "STID": "AIRPORT",
+      "SURPT": "0"
+    }
+  ],
+  "MissionType": [
+    {
+      "MTID": "FLIGHT",
+      "NOS": "2",
+      "MNOS": "2",
+      "MNOSA": "2",
+      "DURN": "3",
+      "DESCR": "双机三阶段：出航30分钟、执行2小时、返航30分钟",
+      "TFOUT": "0.16666666666666666",
+      "TFRET": "0.16666666666666666",
+      "MSUCPT": "0.8333333333333334"
+    }
+  ],
+  "MissionSystem": [
+    {
+      "MTID": "FLIGHT",
+      "SID": "AIRCRAFT"
+    }
+  ],
+  "Operations": [
+    {
+      "USTID": "FLIGHT_POOL",
+      "PRID": "THREE_DAYS"
+    }
+  ],
+  "OperationProfile": [
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "9"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "12"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "15"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "33"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "36"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "39"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "57"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "60"
+    },
+    {
+      "PRID": "THREE_DAYS",
+      "SPRID": "FLIGHT",
+      "STIM": "63"
+    }
+  ],
+  "Control": [
+    {
+      "NREPS": "1000",
+      "SIMPE": "72",
+      "RSEED": "20260908",
+      "APID": "AIRCASE",
+      "RCINT": "0.08333333333333333",
+      "ENPM": "N",
+      "ENLAT": "N",
+      "ENALU": "N",
+      "RELOP": "SERIAL",
+      "ENLOG": "Y"
+    }
+  ],
+  "SimLabFlightRule": [
+    {
+      "MTID": "FLIGHT",
+      "PREP_H": ".5",
+      "PREP_TASK": "TURNROUND",
+      "DAILY_READY": "Y"
+    }
+  ],
+  "Resource": [
+    {
+      "RID": "GROUND_CREW",
+      "DESCR": "再次出动保障组，每组同时1架"
+    }
+  ],
+  "Tasks": [
+    {
+      "TID": "TURNROUND",
+      "DESCR": "完整再次出动准备，固定半小时"
+    }
+  ],
+  "TaskResource": [
+    {
+      "TID": "TURNROUND",
+      "RID": "GROUND_CREW",
+      "QTY": "1"
+    }
+  ],
+  "ResourceAllocation": [
+    {
+      "POINT": "AIRCASE",
+      "RID": "GROUND_CREW",
+      "STID": "AIRPORT",
+      "RQTY": "2"
+    }
+  ],
+  "ResourceStationData": [],
+  "SimLabPlannedMaintenance": [
+    {
+      "PMID": "DAILY_CHECK",
+      "SID": "AIRCRAFT",
+      "USTID": "FLIGHT_POOL",
+      "FIRST_H": "10",
+      "INTERVAL_H": "24",
+      "DURATION_H": "1",
+      "TASK": "TURNROUND"
+    }
+  ],
+  "SimLabFlightInspection": [
+    {
+      "CHECKID": "FLY3",
+      "SID": "AIRCRAFT",
+      "USTID": "FLIGHT_POOL",
+      "INTERVAL_H": "3",
+      "DURATION_H": "1",
+      "TASK": "TURNROUND"
+    }
+  ],
+  "SimLabInspectionInitial": [
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "1",
+      "INITIAL_H": "0.0"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "2",
+      "INITIAL_H": "0.25"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "3",
+      "INITIAL_H": "0.5"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "4",
+      "INITIAL_H": "0.75"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "5",
+      "INITIAL_H": "1.0"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "6",
+      "INITIAL_H": "1.25"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "7",
+      "INITIAL_H": "1.5"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "8",
+      "INITIAL_H": "1.75"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "9",
+      "INITIAL_H": "2.0"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "10",
+      "INITIAL_H": "2.25"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "11",
+      "INITIAL_H": "2.5"
+    },
+    {
+      "CHECKID": "FLY3",
+      "ASSET_NO": "12",
+      "INITIAL_H": "2.75"
+    }
+  ]
+}

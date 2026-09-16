@@ -7,10 +7,11 @@ separate from readiness, and effective mission supply excludes aborted return.
 from collections import Counter
 from .missions import MissionManager
 from .ground import PreparationManager
+from .planned import PlannedMaintenance
 
 
 class FlightManager(MissionManager):
-    def __init__(self, env, tasks, assets, log=None, resource_pool=None):
+    def __init__(self, env, tasks, assets, log=None, resource_pool=None, planned_rules=(), set_state=None):
         self.daily = {}
         self.pools = {}
         self.preparation_hours = 0.0
@@ -26,6 +27,8 @@ class FlightManager(MissionManager):
             a.update(flight_phase='idle', prep_deadline=None, sorties=0)
         super().__init__(env, tasks, assets, log)
         self.ground=PreparationManager(self,resource_pool) if any('ground_rule' in t for t in tasks) else None
+        self.planned = PlannedMaintenance(self, resource_pool, planned_rules,
+            set_state or (lambda a, s: a.update(state=s))) if planned_rules else None
         for t in self.tasks:
             duration=t['end']-t['start']
             t.update(flight_status='scheduled', members=[], launched_at=None, ended_at=None,
@@ -83,6 +86,7 @@ class FlightManager(MissionManager):
         self.rebalance()
 
     def integrate(self):
+        if self.planned:self.planned.inspections.integrate()
         if self.ground:self.ground.integrate()
         elapsed = self.env.now-self.last
         self.preparation_hours += elapsed*sum(a['flight_phase']=='preparing' for a in self.assets)
@@ -158,11 +162,14 @@ class FlightManager(MissionManager):
                     t['phase']=phase
                 for a in members:
                     a['flight_phase']=phase
+        if self.planned:self.planned.advance()
         for (pool, day), start in sorted(self.daily.items(), key=lambda x:x[1]):
             if start <= self.env.now and (self.pools[pool]['day'] is None or self.pools[pool]['day'] < day):
                 self.pools[pool]['day'] = day
                 for a in self.assets:
                     if self.pool_for(a)==pool and a['mission'] is None:
+                        if self.planned and (self.planned.blocked(a) or a.get('post_planned')):
+                            continue
                         ground_rule=self.pools[pool]['ground_rule']
                         if ground_rule is not None:
                             if ground_rule['daily_ready'] and a['state']=='available':
@@ -176,6 +183,8 @@ class FlightManager(MissionManager):
             pool = self.pool_for(a)
             if pool is None or a['mission'] is not None:
                 continue
+            if self.planned and self.planned.blocked(a):
+                continue
             if a['state'] != 'available':
                 a['flight_phase'] = 'maintenance'
                 a['prep_deadline'] = None
@@ -183,23 +192,28 @@ class FlightManager(MissionManager):
                 a['flight_phase'] = 'ready'
                 a['prep_deadline'] = None
                 self.log(a['id'], '保障完成待命', '')
-            elif a['flight_phase'] in ('idle','maintenance') and self.pools[pool]['day'] is not None:
+            elif a['flight_phase'] in ('idle','maintenance') and (self.pools[pool]['day'] is not None or
+                    (self.planned and self.planned.inspections.clocks and a.get('post_planned'))):
                 self.prepare(a, pool)
+            if a['flight_phase']=='ready':a.pop('post_planned',None)
         self.active = [t for t in self.tasks if t['start'] <= self.env.now < t['end']]
         for t in sorted(self.active, key=lambda x:(x['start'],x['id'])):
             if t['flight_status'] != 'scheduled':
                 continue
             candidates = sorted([a for a in self.assets if self.eligible(t,a) and a['state']=='available'
-                                 and a['mission'] is None and a['flight_phase']=='ready'],
+                                 and a['mission'] is None and a['flight_phase']=='ready'
+                                 and not (self.planned and self.planned.blocked(a))],
                                 key=lambda a:(a['sorties'],a['id']))
             if self.env.now != t['start'] or len(candidates)<t['quantity']:
                 t['flight_status'] = 'cancelled'
                 t['ended_at'] = self.env.now
                 t['success_reason']='cancelled_unready'
                 eligible=[a for a in self.assets if self.eligible(t,a)]
-                snapshot=Counter('maintenance' if a['state']!='available' else 'airborne' if a['mission'] is not None else a['flight_phase'] for a in eligible)
+                snapshot=Counter('planned_maintenance' if self.planned and self.planned.blocked(a) and a['mission'] is None
+                                 else 'maintenance' if a['state']!='available' else 'airborne' if a['mission'] is not None else a['flight_phase'] for a in eligible)
                 t['launch_readiness']=dict(snapshot)
                 t['cancel_reason']=('fleet_shortage' if len(eligible)<t['quantity'] else
+                    'planned_maintenance' if snapshot['planned_maintenance'] else
                     'maintenance' if sum(a['state']=='available' for a in eligible)<t['quantity'] else
                     'airborne' if sum(a['state']=='available' and a['mission'] is None for a in eligible)<t['quantity'] else
                     'preparation_wait' if snapshot['waiting_preparation'] else 'preparing')
@@ -228,6 +242,7 @@ class FlightManager(MissionManager):
                 if not signal.triggered:
                     signal.succeed()
                 self.log(a['id'], '任务分配' if a['mission'] else '退出任务', a['mission'] or '')
+        if self.planned:self.planned.inspections.arm()
         self.supply, self.reasons = {}, {}
         for t in self.active:
             n = t['quantity'] if t['flight_status']=='launched' else 0
@@ -236,7 +251,10 @@ class FlightManager(MissionManager):
             self.reasons[t['id']] = Counter({reason:t['quantity']-n})
 
     def calendar(self):
-        for time in sorted({t[k] for t in self.tasks for k in ('start','out_end','return_start','end')} | set(self.daily.values())):
+        times = {t[k] for t in self.tasks for k in ('start','out_end','return_start','end')} | set(self.daily.values())
+        if self.planned:times.update(x[0] for x in self.planned.schedule)
+        if self.planned and self.planned.inspections.clocks:times.add(0)
+        for time in sorted(times):
             yield self.env.timeout(time-self.env.now)
             self.rebalance()
 
@@ -259,4 +277,5 @@ class FlightManager(MissionManager):
                  completion_rate=f['completed']/f['requested'],
                  all_successful=int(f['successful']==f['requested']))
         if self.ground:result['ground']=self.ground.snapshot()
+        if self.planned:result['planned']=self.planned.snapshot()
         return result

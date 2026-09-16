@@ -20,7 +20,7 @@ from ..missions import GAP_LABELS
 from ..maintenance import PHASES
 from ..validation import validate
 from ..compiler import compile_model, ModelError
-from ..flight_results import export_tasks, export_ground, REASONS, PHASES as FLIGHT_PHASES, STATUSES, CANCEL_REASONS, GROUND_STATUSES
+from ..flight_results import export_tasks, export_ground, export_planned, export_inspection_clocks, export_aging, REASONS, PHASES as FLIGHT_PHASES, STATUSES, CANCEL_REASONS, GROUND_STATUSES, PLANNED_STATUSES
 from .flight_timing import clock
 from .modeling import ModelEditor
 from .structure import StructureView
@@ -276,7 +276,7 @@ class MainWindow(QMainWindow):
         text.setHtml('''<p>支持 System→LRU→SRU 串联结构。基地整换 LRU，修理站检测、换修 SRU、测试后返库。</p>
         <p>故障率单位为每百万运行小时。系统按 UTIL 连续折算运行量，故障后暂停使用。</p>
         <p>支持两级保障网络、部件拆装、修复返库、运输延迟及组合资源排队。</p>
-        <p>全量建模表均可保存交换；高级规则尚未接入的，会在运行前指出并拦截。</p>
+        <p>建模界面仅展示当前支持的表，按 01–07 建模流程排列。尚未接入的高级规则会在运行前指出并拦截。</p>
         <p><b>结果口径：</b>可用度按状态持续时间精确积分；曲线为各重复试验的采样均值。</p>
         <p>填写 Operations 后启用固定值守窗口：UTIL=1，待命和补位准备不累计运行故障；按优先级分配空闲设备，不抢占。SimLabDutyRule 可配置最低保障、补位时间和连续不达标容忍时间。</p>
         <p>资源班次按 ShiftProfile 显式时间窗执行：班内开始，允许跨班完成。任务满足率是设备小时供给比例，不等同原厂任务成功率。</p>
@@ -355,6 +355,28 @@ class MainWindow(QMainWindow):
         ground_page=QWidget();ground_layout=QVBoxLayout(ground_page)
         ground_layout.addWidget(button('导出全部轮次准备作业 CSV',self.export_ground_details))
         ground_layout.addWidget(self.ground_jobs)
+        self.planned_table = readonly_table(['计划维修指标','跨轮均值'])
+        self.planned_jobs = readonly_table(['首轮飞机','计划','到期/h','申请/h','开始/h','结束/h','延后/h','等资源/h','作业/h','状态'])
+        planned_page = QWidget(); planned_layout = QVBoxLayout(planned_page)
+        planned_layout.addWidget(button('导出全部轮次计划维修 CSV', self.export_planned_details))
+        planned_layout.addWidget(self.planned_table)
+        planned_layout.addWidget(self.planned_jobs)
+        self.inspection_clocks = readonly_table(['首轮飞机','检查','初始/h','本轮在空/h','距上次检查/h','间隔/h','完成次数','是否到期','超限/h'])
+        self.inspection_jobs = readonly_table(['首轮飞机','检查','到期/h','开始/h','完成/h','周期已飞/h','超限/h','状态'])
+        inspection_page = QWidget(); inspection_layout = QVBoxLayout(inspection_page)
+        inspection_layout.addWidget(button('导出全部轮次检查计时 CSV', self.export_inspection_details))
+        inspection_layout.addWidget(button('导出全部轮次维修工单 CSV', self.export_planned_details))
+        inspection_layout.addWidget(self.inspection_clocks)
+        inspection_layout.addWidget(self.inspection_jobs)
+        self.age_instances = readonly_table(['首轮实物号','部件','有效年龄/h','终身运行/h','状态','位置'])
+        self.age_events = readonly_table(['首轮时间/h','实物号','部件','事件','处理前年龄/h','处理后年龄/h','终身运行/h','修复方式'])
+        aging_page = QWidget(); aging_layout = QVBoxLayout(aging_page)
+        self.age_notice = label('配置部件老化后运行实验以查看年龄。')
+        aging_layout.addWidget(self.age_notice)
+        aging_layout.addWidget(button('导出全部轮次部件年龄 CSV', lambda: self.export_age_details(False)))
+        aging_layout.addWidget(button('导出全部轮次故障修复年龄 CSV', lambda: self.export_age_details(True)))
+        aging_layout.addWidget(self.age_instances)
+        aging_layout.addWidget(self.age_events)
         self.flight_phase_table = readonly_table(['飞行任务', '计划出航 / 小时', '计划执行 / 小时', '计划返航 / 小时',
                                                   '实际出航 / 架·小时', '实际执行 / 架·小时', '实际返航 / 架·小时', '其中中止返航 / 架·小时'])
         for title, widget in [('停机原因', self.downtime_table), ('资源利用率', self.resource_table),
@@ -363,9 +385,11 @@ class MainWindow(QMainWindow):
                               ('维修统计', self.maintenance_table), ('工序耗时', self.phase_table), ('部件实例', self.component_table),
                               ('值守达标', self.duty_table), ('不达标时段', self.duty_intervals), ('飞行与备用机', self.flight_table), ('飞行阶段', self.flight_phase_table),
                               ('任务成功率', self.success_table), ('首轮成功判定', self.success_details),
-                              ('准备资源评估',self.ground_table),('再次出动准备',ground_page),('取消原因',self.cancel_table)]:
+                              ('准备资源评估',self.ground_table),('再次出动准备',ground_page),('取消原因',self.cancel_table),('计划维修汇总',planned_page),('飞行小时检查',inspection_page)]:
             tabs.addTab(widget, title)
         self.result_tabs = tabs
+        tabs.addTab(aging_page, '部件老化')
+        tabs.currentChanged.connect(lambda index: self.chart_tabs.setVisible(tabs.widget(index) not in (planned_page,inspection_page,aging_page)))
         layout.addWidget(tabs, 2)
         self.pages.addWidget(page)
 
@@ -398,6 +422,7 @@ class MainWindow(QMainWindow):
         <p>全部任务须为飞行模式，不能混用值守规则；同池保障时长一致。每日首波前全池保障，按累计出动少者优先选机。准点凑齐整队才能起飞，不足取消；故障整队中止、空中不补位。保障无资源约束、不累计故障。“飞行阶段”区分实际三阶段时间和中止返航时间；后者不计有效任务供给。本地完成判据不是原厂MSUCPT成功点。</p>
         <p>0.7 增加 MSUCPT 成功点（0～1，默认1）。起飞后达到该点即成功，同刻故障优先算成功；之后中止不撤销成功。结果分别显示任务成功率FMSUC与完整完成率。模型数据下方可按分钟输入并预览；逐轮飞行CSV导出所有任务判定。旧结果不推算成功值，需要重跑。</p>
         <p>0.8 可在SimLabFlightRule配置PREP_TASK，引用Tasks/TaskResource及ResourceAllocation的保障资源。半小时为一次完整再次出动准备；资源全部到齐才开始，班内开始、跨班继续，同刻准备完成先于起飞。DAILY_READY=Y表示每天首波健康地面飞机假定已提前保障，未完准备单独记作“首波假设接续完成”，不计正常完工且释放资源。故障机仍需修复。准备资源评估和再次出动准备页可查看及导出。</p>
+        <p>0.9 在“维修与保障作业 → 日历计划维修”填写部署位置、首次到期、重复间隔、固定时长及资源作业。仅支持固定飞行；到期停派，在飞先落地，已有故障维修及准备先完成。重复到期逐次排队，计划维修后重新准备；首波假设不能跳过。结果页可查看首轮工单和导出全轮CSV。</p>
         <p>FRT=1000 且 OPID=OPHOURS，表示平均每 1000 个运行小时发生一次故障。UTIL=0.5 表示每个可用日历小时累计 0.5 个运行小时。</p>
         <p>串联关键部件故障使设备停机，停机期间不累计运行故障。层级模式保留健康叶子的剩余故障预算，修复叶子下次运行再抽样。暂不支持冗余、老化、预防性维修和供应中断。</p>
         <h3>0.2 任务与班次</h3>
@@ -816,10 +841,29 @@ class MainWindow(QMainWindow):
     def selected_run(self):
         return next((r for r in self.complete_runs if r['id'] == self.run_selector.currentData()), None)
     def show_result(self, *args):
+        self.age_instances.setRowCount(0)
+        self.age_events.setRowCount(0)
+        self.age_notice.setText('本实验没有部件年龄结果；配置老化后重新运行。')
+        self.inspection_clocks.setRowCount(0)
+        self.inspection_jobs.setRowCount(0)
         run = self.selected_run() if hasattr(self, 'complete_runs') else None
+        if run and run['result'].get('aging'):
+            aging = run['result']['aging']
+            self.age_notice.setText('显示首轮；年龄按运行小时累计，维修默认修复如新。' +
+                (' 明细已截断，请缩小实验规模。' if aging['instances_truncated'] or aging['events_truncated'] else ''))
+            fill_table(self.age_instances, [[r['part'],r['iid'],f"{r['age']:.6f}",f"{r['lifetime_hours']:.6f}",
+                '故障' if r['broken'] else '完好',
+                {'installed':'装机','stock':'库存','attached':'附属','held':'待安装','transport':'运输',
+                 'repair_queue':'待维修','repair':'维修','wait_resource':'等资源','diagnosis':'检测',
+                 'remove':'拆卸','wait_sru':'等子件','install':'安装','test':'测试'}.get(r['location'],r['location'])]
+                for r in sorted(aging['instances'],key=lambda r: -r['age'])])
+            fill_table(self.age_events, [[f"{r['time']:.6f}",r['part'],r['iid'],
+                '故障' if r['event']=='failure' else '修复完成',f"{r['age_before']:.6f}",
+                f"{r['age_after']:.6f}",f"{r['lifetime_hours']:.6f}",
+                '修复如新' if r['repair']=='PERFECT' else '最小修复'] for r in aging['events']])
         self.mission_export_button.setEnabled(bool(run and run['result'].get('mission')))
         self.maintenance_export_button.setEnabled(bool(run and run['result'].get('maintenance')))
-        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table, self.success_table, self.success_details,self.ground_table,self.ground_jobs,self.cancel_table):
+        for table in (self.maintenance_table, self.phase_table, self.component_table, self.duty_table, self.duty_intervals, self.flight_table, self.flight_phase_table, self.success_table, self.success_details,self.ground_table,self.ground_jobs,self.cancel_table,self.planned_table,self.planned_jobs):
             table.setRowCount(0)
         if not run:
             for metric in self.result_cards:
@@ -854,6 +898,23 @@ class MainWindow(QMainWindow):
         if mission:
             flight = mission.get('flight')
             ground=mission.get('ground')
+            planned = mission.get('planned')
+            if planned:
+                labels = dict(due_jobs='到期作业 / 次',completed_jobs='已完成 / 次',deferred_jobs='期末等待前序 / 次',
+                    waiting_jobs='期末等待资源 / 次',working_jobs='期末维修中 / 次',
+                    deferred_aircraft_hours='落地、修复及前序延后 / 架·小时',wait_aircraft_hours='资源及班次等待 / 架·小时',
+                    work_aircraft_hours='实际维修作业 / 架·小时')
+                fill_table(self.planned_table, [[labels[k], f'{v:.3f}'] for k,v in planned.items() if k not in ('jobs','clocks')])
+                fill_table(self.planned_jobs, [[j['asset'],j['rule']]+
+                    [f'{j[k]:.3f}' if j[k] is not None else '—' for k in
+                     ('due_at','requested_at','started_at','ended_at','deferred_hours','wait_hours','work_hours')]+
+                    [PLANNED_STATUSES[j['status']]] for j in planned['jobs']])
+                fill_table(self.inspection_clocks, [[c['asset'],c['rule']]+
+                    [f'{c[k]:.3f}' for k in ('initial_hours','flown_hours','hours_since_check','interval_hours')]+
+                    [str(c['completed_checks']),'是' if c['due'] else '否',f'{c["overrun_hours"]:.3f}'] for c in planned.get('clocks',[])])
+                fill_table(self.inspection_jobs, [[j['asset'],j['rule']]+
+                    [f'{j[k]:.3f}' if j[k] is not None else '—' for k in ('due_at','started_at','ended_at','cycle_hours','overrun_hours')]+
+                    [PLANNED_STATUSES[j['status']]] for j in planned['jobs'] if j.get('trigger')=='flight_hours'])
             if ground:
                 labels={'requested_jobs':'请求准备作业 / 次','completed_jobs':'正常完成 / 次','assumed_jobs':'每日首波假设接续未完作业 / 次',
                     'waiting_jobs':'期末排队 / 次','working_jobs':'期末作业中 / 次','wait_aircraft_hours':'准备总等待 / 架·小时',
@@ -866,7 +927,7 @@ class MainWindow(QMainWindow):
                     GROUND_STATUSES[j['status']]] for j in ground['jobs']])
             if flight:
                 fill_table(self.cancel_table,[[t['id'],CANCEL_REASONS.get(t.get('cancel_reason'),'历史结果未分类'),
-                    '；'.join(f'{dict(maintenance="维修中",airborne="飞行占用",ready="已就绪",preparing="准备作业中",waiting_preparation="准备排队",idle="未准备").get(k,k)} {v}架' for k,v in (t.get('launch_readiness') or {}).items())]
+                    '；'.join(f'{dict(maintenance="维修中",planned_maintenance="计划维修到期或执行中",airborne="飞行占用",ready="已就绪",preparing="准备作业中",waiting_preparation="准备排队",idle="未准备").get(k,k)} {v}架' for k,v in (t.get('launch_readiness') or {}).items())]
                     for t in result['replication_results'][0]['mission']['tasks'] if t['flight_status']=='cancelled'])
             if flight:
                 labels = {'requested':'计划编队任务 / 次', 'started':'实际起飞编队 / 次',
@@ -920,7 +981,8 @@ class MainWindow(QMainWindow):
             self.mission_summary.setText('本实验没有任务日历。旧版本实验仍可查看可用度与保障结果。')
             self.mission_table.setRowCount(0)
             self.gap_table.setRowCount(0)
-        names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源或班次', 'replacement': '拆卸与安装作业', 'returning_failed':'故障返航（尚未落地）'}
+        names = {'waiting_spare': '等待备件（含供应运输）', 'waiting_resource': '等待拆装资源或班次', 'replacement': '拆卸与安装作业', 'returning_failed':'故障返航（尚未落地）',
+                 'planned_wait':'计划维修等待资源或班次','planned_maintenance':'计划维修作业'}
         total = sum(result['downtime'].values())
         fill_table(self.downtime_table, [[names[key], f'{val:.2f}', f'{val/total:.1%}' if total else '0%'] for key, val in result['downtime'].items()])
         fill_table(self.resource_table, [[key, f'{val:.1%}'] for key, val in result['resources'].items()])
@@ -991,12 +1053,42 @@ class MainWindow(QMainWindow):
             try:export_ground(run,path)
             except Exception as error:self.warn('导出失败',str(error))
 
+    def export_planned_details(self):
+        run = self.selected_run()
+        if not run or not (run['result'].get('mission') or {}).get('planned'):
+            self.warn('没有计划维修结果','请选择已配置日历计划维修的实验。');return
+        path, _ = QFileDialog.getSaveFileName(self,'导出全部计划维修','日历计划维修.csv','CSV (*.csv)')
+        if path:
+            try:export_planned(run,path)
+            except Exception as error:self.warn('导出失败',str(error))
+
     def export_missions(self):
         path, _ = QFileDialog.getSaveFileName(self, '导出任务窗口结果', '任务结果.csv', 'CSV (*.csv)')
         if path:
             try:
                 self.export_missions_path(path)
                 self.statusBar().showMessage('任务结果已导出：'+path, 10000)
+            except Exception as error:
+                self.warn('导出失败', str(error))
+
+    def export_inspection_details(self):
+        run=self.selected_run()
+        if not run or 'clocks' not in ((run['result'].get('mission') or {}).get('planned') or {}):
+            self.warn('没有检查计时结果','请选择已配置飞行小时检查的实验。');return
+        path,_=QFileDialog.getSaveFileName(self,'导出检查计时','飞行小时检查.csv','CSV (*.csv)')
+        if path:
+            try:export_inspection_clocks(run,path)
+            except Exception as error:self.warn('导出失败',str(error))
+
+    def export_age_details(self, events=False):
+        run = self.selected_run()
+        if not run or 'aging' not in run['result']:
+            self.warn('没有年龄结果', '请选择已配置部件老化的实验。')
+            return
+        path, _ = QFileDialog.getSaveFileName(self, '导出部件年龄', '故障修复年龄.csv' if events else '部件年龄.csv', 'CSV (*.csv)')
+        if path:
+            try:
+                export_aging(run, path, events)
             except Exception as error:
                 self.warn('导出失败', str(error))
 

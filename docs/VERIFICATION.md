@@ -1,3 +1,65 @@
+# v0.9.2 M2 验证（2026-09-15）
+
+- 完整 pytest：218项通过。tests/test_aging.py覆盖六组解析预言机、条件剩余寿命、数值消减与极小年龄、输入冲突/事件规模、真实任务暂停、期末年龄、修复如新/最小修复、健康兄弟件、备件流转、多故障子件维修、检查不重置年龄、全轮CSV、格式9与旧8读取器。
+- 源码桌面55项通过：build/qa-v092-source-final/smoke-result.json；最终打包桌面55项通过：build/qa-v092-package/smoke-result.json。20-component-aging.png已查看，含实际故障及修复记录，避免空记录验收。新表中文输入、后台工作进程、结果显示、CSV与项目往返均覆盖。
+- 两种修复方式各1000轮、各1576次修复、每轮48个实物。年龄守恒、检查计时、工单时间、无空中计划维修及原v0.9.1案例1000轮数值和事件相同。证据docs/cases/2026-09-15-aircraft-aging/verification.json。
+- 源码、最终打包EXE及保存案例在两个模式首轮结果相同：同目录release-verification.json。
+- 第一次源码桌面检查发现新结果页引用未导入QLabel；使用既有label组件后，重新完整检查通过。加强场景确保首轮真正出现维修记录。
+- 多SRU故障测试发现旧总成维修断言只允许一个故障SRU；改为逐个拆换并在最后统一测试。已有单故障路径回归通过。
+- 已将最终程序移到dist/SimLab，旧版备份dist/SimLab-backup-before-v092-20260915；安装位置55项桌面检查通过（build/qa-v092-installed/smoke-result.json）；ZIP共257项、57.44 MiB，CRC全部通过（build/qa-v092-release.json）。
+- EXE SHA256：306CEF77198D46EB467CCB616BA0F0B23F7EDD995C866412DEC7B2493F0C92DB。
+- 两个案例已复制至C:/Users/sharo/Documents/SimLab/projects/aircraft-aging-PERFECT-v092-20260915.sqlite及MINIMAL对应路径，复制哈希一致；实际项目库由15条增至17条，原条目保留，索引备份build/project-library-before-v092-20260915.json。已验证注册，不声称已在用户窗口打开。
+
+## 设计验收映射
+
+1–2：test_conditional_lifetime_analytic、test_consumed_hazard_independent_analytic_value、test_actual_simpy_assignment_pauses_preserve_budget_and_age、test_util_scales_age_but_zero_risk_does_not_stop_age。
+3–4：test_real_repair_updates_failed_leaf_age、test_initial_stock_is_new_and_healthy_sibling_keeps_age、test_two_failed_srus_in_same_returned_lru_are_both_repaired、test_repeated_failure_trajectories_differ_after_repair。
+5–6：test_direct_lru_inspections_do_not_reset_age、test_layered_age_settles_at_horizon_without_failure及两组混合维护案例复算。
+7：非法输入、故障规模及数值稳定性测试。
+8–9：218项全量测试、源码/打包55桌面检查、旧案例1000轮和两模式源码/EXE重放。
+10：使用说明、案例及本节；最终安装位置55项检查及ZIP CRC通过，全部验收项闭合。
+
+以下保留此前版本验证历史。
+
+# v0.9.1 飞行小时检查（2026-09-15）
+
+- 187项pytest通过；源码build/qa-v091-source、便携版build/qa-v091-package及最终安装位置build/qa-v091-installed各50项桌面检查通过。新增中文输入、混合维修、逐架计时、两类全轮CSV及格式8往返经过真实worker核验，已查看19-flight-inspection.png。
+- tests/test_inspection.py覆盖空中到期、超限和重启、初始到期、逐架独立进度、中止返航、同时到期串行后一次准备、期末未完成、输入拒绝、不同检查互不重置、非约束计时不改变随机物理轨迹及版本7读取配置拒绝格式8。读取原v0.9格式7案例并往返新格式通过。
+- tools/run_aircraft_inspection_case.py：1000轮41778张维修工单（36000日历、5778飞行小时），12000条逐架计时；初始+本轮飞行=已完成周期+当前计时，飞机实际在空时间、部件和停机积分复核通过，无空中维修。CSV和项目包往返通过。
+- 原v0.9案例1000轮任务、事件、逐轮结果、可用度、资源及停机数值相同。--verify-only --exe重放证实便携版、源码与已保存首轮结果相同；证据docs/cases/2026-09-15-aircraft-inspection/release-verification.json。
+- 安装dist/SimLab，启动SimLab.cmd不变；原v0.9备份dist/SimLab-backup-before-v091-20260915。最终exe SHA256为9E9EDD21DFA95BB7F33630B90083659395EE87D3484E09083ECB11048BD6F75A。ZIP v0.9.1为53.56 MiB，257项，完整性通过，含新旧计划维修案例与中文说明。
+- 案例复制并核对哈希至C:/Users/sharo/Documents/SimLab/projects/aircraft-inspection-v091-20260915.sqlite；PowerShell保留原14条实际项目库索引并追加为15条，备份build/project-library-before-v091-20260915.json。此处确认登记和文件，不声称用户实际窗口截图已核验。
+- 修复：启用小时检查时首波前完成维修立即进入真实准备；非约束检查只新增零值取消分类，不改变物理数值。最初6小时间隔在本案例未触发，改为3小时且断言必须出现小时工单，防止空验证。未提交或推送；老化、寿命更新和原厂等价未实现。
+
+# v0.9 日历计划维修（2026-09-15，历史）
+
+- 最终源码170项pytest通过；新增22+1项计划维修相关测试覆盖日历边界、在飞延后、既有准备不抢占、跨班、重复积压、故障不修复、修后准备、空白默认值、输入拒绝和结果/项目往返。
+- 源码45项桌面检查：build/qa-v09-source-verified-20260915；最终安装版45项：build/qa-v09-installed-final-20260915。实际worker、中文输入、计划维修结果/停机原因、全轮CSV和格式7往返通过。已查看新增页面截图；计划页展开时隐藏上方曲线以留出表格阅读空间。
+- tools/run_aircraft_planned_case.py：1000轮、36000次到期/完成工单，状态/时间/48部件守恒、计划维修与飞行不重叠、全轮CSV复算及项目包往返通过。每轮实际计划维修36架·小时，资源等待81.170077架·小时；人为集中到期的合成压力场景取消6波/轮，不能解释为实际保障预测。
+- 原v0.8两组资源案例1000轮可用度、任务汇总、逐轮结果、资源、停机及首轮事件与保存结果逐项相同。tools/verify_v09_release.py验证最终exe/源码/已保存首轮结果相同；以8265cb3的真实旧读取器代码和扩展版本6验证拒绝格式7。证据build/qa-v09-release/verification.json。
+- 新案例保存的snapshot与model_hash一致，可从快照创建分支。复制到C:/Users/sharo/Documents/SimLab/projects/aircraft-planned-v09-20260915.sqlite；复制哈希一致，PowerShell登记原实际project-library.json，保留原13条后共14条。此处证明登记与文件可读，不冒充用户实际窗口截图核验。
+- 最终通过tools/build_windows.ps1构建并安装到dist/SimLab，根目录启动SimLab.cmd不变；旧版完整备份dist/SimLab-backup-before-v09-20260915。最终exe SHA256：E5ACF2EE136D0052ECF8244EACE7D5696A31BBBE454F9B8BCFFF5EEC8FDF387F。
+- dist/SimLab-Windows-v0.9.0.zip为51.96 MiB，256项，CRC完整性通过，包含计划维修示例包与中文说明。源码及案例尚未提交/推送。
+- 验收中修复两处问题：后台保存替换对象后smoke持有旧tables引用；停机原因中文映射遗漏planned_wait/planned_maintenance。smoke增加Qt异常捕获，不能再以进程退出码零掩盖回调异常。原厂数值等价及真实数据校准仍未完成。
+
+# 建模中文显示（2026-09-14，历史）
+
+- 当前25张表、214个字段的表名、列标题、右侧字段说明、单位、约束及关联表均为中文；固定选项中文显示、原值存储，标识编号不翻译。搜索兼容中文字段名称与原代码。
+- 147项pytest通过；新增Qt覆盖检查和枚举编辑/粘贴/保存/CSV往返检查，确认浏览不改写模型、标识符不会被错误翻译。
+- 源码与安装版各40项桌面检查通过，证据位于 `build/qa-chinese-source-20260914`、`build/qa-chinese-installed-20260914`；已查看中文建模截图。
+- 本机主案例准确名称为“飞机再次出动保障 · 2组 · 12架 · 1000次”；“飞机成功点 · 12架备用池 · 1000次”为此前版本。飞机主案例只读打开与浏览后输入及历史结果保持一致。
+- 使用 `tools/build_windows.ps1 -OutputDirectory dist/staging-chinese-20260914` 构建并安装到原位置；上版备份 `dist/SimLab-backup-before-chinese-20260914`。
+- 部件分类翻译核对本机原厂手册第175页：部分可修复部件及子件区别于完全可修复件；未扩大本地引擎支持范围。
+
+# 建模导航调整（2026-09-14）
+
+- 保留 01–07 七步建模流程，仅展示当前支持的 25 张表；移除“显示全部”，搜索不展示未支持表。底层 136 表字典和项目格式不变。
+- 七步为装备组成、站点与部署、资源与班次、维修与保障作业、备件与供应、任务与运行、仿真控制。飞行/值守扩展归入 06，检测测试扩展归入 04。
+- Qt 实例核验：25 张表无遗漏，01–07 顺序与扩展归属正确，未支持表搜索不可见，清空搜索恢复七类；145 项 pytest 通过。
+- 源码 `build/qa-modeling-seven-source-20260914/smoke-result.json` 和原位置安装版 `build/qa-modeling-seven-installed-final-20260914/smoke-result.json` 各 40 项桌面检查通过，已查看建模截图。
+- 原程序备份到 `dist/SimLab-backup-before-modeling-20260914`，统一启动入口保持原位置；12 个既有本机项目数据库哈希核验未变。
+- 打包注意：直接使用 spec 会漏掉 `tools/build_windows.ps1` 中的运行库修复。本次初次安装检查因 QtCore DLL 加载失败，按现有脚本统一根目录 VC 运行库为 PySide6 版本，并移除误收集的 ICU 库后，最终安装检查通过。后续应使用该构建脚本。
+
 # v0.8 验证记录（2026-09-11）
 
 - 145项自动化测试通过；最终源码与打包版各40项桌面检查通过，覆盖项目搜索/复制、输入持久化、后台计算、准备评估与CSV。

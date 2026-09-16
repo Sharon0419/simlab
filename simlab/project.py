@@ -29,7 +29,7 @@ def model_hash(tables):
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 def check_structure(project):
-    if project.get('extensions_version', 1) not in (1, 2, 3, 4, 5, EXTENSIONS_VERSION):
+    if project.get('extensions_version', 1) not in tuple(range(1, EXTENSIONS_VERSION + 1)):
         raise ValueError('SimLab 扩展格式版本不支持。')
     if project.get('format') != FORMAT:
         raise ValueError('项目格式版本不支持，请使用匹配的软件版本。')

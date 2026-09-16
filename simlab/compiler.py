@@ -4,8 +4,14 @@ from .schema import TABLES, value, effective
 from .validation import validate
 from .operations import SUPPORTED_OPERATIONS, compile_operations
 from .hierarchy import compile_structure
+from .planned import compile_planned
+from .aging import compile_aging
 
 SUPPORTED = {
+    'SimLabItemAging': {'IID', 'SHAPE', 'SCALE_H', 'INITIAL_H', 'REPAIR'},
+    'SimLabFlightInspection': {'CHECKID', 'SID', 'USTID', 'INTERVAL_H', 'DURATION_H', 'TASK'},
+    'SimLabInspectionInitial': {'CHECKID', 'ASSET_NO', 'INITIAL_H'},
+    'SimLabPlannedMaintenance': {'PMID', 'SID', 'USTID', 'FIRST_H', 'INTERVAL_H', 'DURATION_H', 'TASK'},
     'SimLabDepotProcess': {'LRU', 'STATION', 'DIAG_H', 'DIAG_TASK', 'TEST_H', 'TEST_TASK'},
     'System': {'SID', 'FRT'},
     'Item': {'IID', 'FRT', 'OPID', 'TYPE', 'AFFRT', 'CRIT', 'TRACK'},
@@ -151,6 +157,8 @@ def compile_model(tables):
             'resources': requirements(val('ItemReplacement', row, 'SURPTID'), row['STID'])}
     structures, children, structure_errors = compile_structure(tables)
     errors.extend(structure_errors)
+    aging, aging_errors = compile_aging(tables, children, horizon)
+    errors.extend(aging_errors)
     depot_processes = {}
     for row in rows('SimLabDepotProcess'):
         parent, station = row['LRU'], row['STATION']
@@ -199,16 +207,37 @@ def compile_model(tables):
     if installed_count + sum(qty * physical_size(iid) for (_, iid), qty in stock.items()) > 200000:
         errors.append('模型规模超限：装机部件与初始库存合计不超过 200000 件。')
     estimated_failures = sum(f['quantity'] * f['util'] * sum(p['quantity']*p['rate'] for p in f['parts']) for f in fleets) * horizon
+    # For nondecreasing Weibull hazard, end-age hazard bounds all repair paths.
+    for fleet in fleets:
+        for parent in fleet['parts']:
+            for leaf in children.get(parent['iid'], [parent]):
+                rule = aging.get(leaf['iid'])
+                if not rule:
+                    continue
+                multiplier = rule['application'] * parent['envf']
+                quantity = parent['quantity']
+                if parent['iid'] in children:
+                    multiplier *= leaf['envf']
+                    quantity *= leaf['quantity']
+                end_age = rule['initial'] + horizon * fleet['util']
+                try:
+                    hazard = multiplier * rule['shape'] / rule['scale'] * (end_age / rule['scale']) ** (rule['shape'] - 1)
+                    estimated_failures += fleet['quantity'] * quantity * horizon * fleet['util'] * hazard
+                except OverflowError:
+                    estimated_failures = math.inf
     if not math.isfinite(estimated_failures) or estimated_failures > 5000000:
         errors.append('故障事件规模过大：请降低故障率、设备数量或仿真时长。')
     missions, schedules, operation_errors = compile_operations(
         tables, fleets, capacity, repairs, replacements, horizon, reps,
         [(station, rule) for (station, _), stages in depot_processes.items() for rule in stages.values()])
     errors.extend(operation_errors)
+    planned, planned_errors = compile_planned(tables, fleets, missions, capacity, schedules, horizon, reps)
+    errors.extend(planned_errors)
     if errors:
         raise ModelError(errors)
     return {'horizon': horizon, 'interval': interval, 'replications': reps, 'seed': seed,
             'remove_fraction': num('Control', c, 'RMVFR'), 'log': val('Control', c, 'ENLOG') == 'Y',
             'point': point, 'fleets': fleets, 'count': count, 'links': links, 'stock': stock,
             'capacity': capacity, 'repairs': repairs, 'replacements': replacements,
-            'missions': missions, 'schedules': schedules, 'children': children, 'depot_processes': depot_processes}
+            'missions': missions, 'schedules': schedules, 'children': children, 'depot_processes': depot_processes,
+            'planned': planned, 'aging': aging}

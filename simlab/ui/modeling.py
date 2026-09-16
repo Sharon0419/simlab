@@ -5,18 +5,24 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLineEdit, QCheckBox, QTableWidget, QTableWidgetItem, QSplitter, QTextBrowser,
+    QLineEdit, QTableWidget, QTableWidgetItem, QSplitter, QTextBrowser,
     QFileDialog, QMessageBox, QApplication, QAbstractItemView, QStyledItemDelegate, QComboBox)
-from ..schema import TABLES, CORE_TABLES, table_label, field_label, category, defaults, effective
+from ..schema import TABLES, MODELING_GROUPS, table_label, field_label, defaults, effective
 from ..compiler import SUPPORTED, DOCUMENTARY
 from ..validation import choices
 from .widgets import label, button
 from .flight_timing import FlightTiming
+from .modeling_labels import (display_value, raw_value, constraint_label, references_label,
+    TYPE_LABELS, UNIT_LABELS)
 
 class FieldDelegate(QStyledItemDelegate):
     def __init__(self, editor):
         super().__init__(editor)
         self.editor = editor
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        field = TABLES[self.editor.current_table][index.column()]
+        option.text = display_value(field, index.data())
     def createEditor(self, parent, option, index):
         field = TABLES[self.editor.current_table][index.column()]
         options = choices(field)
@@ -28,17 +34,20 @@ class FieldDelegate(QStyledItemDelegate):
         if options:
             widget = QComboBox(parent)
             widget.setEditable(True)
-            widget.addItems([''] + sorted(set(x for x in options if x)))
+            for value in [''] + sorted(set(x for x in options if x)):
+                widget.addItem(display_value(field, value), value)
             return widget
         return super().createEditor(parent, option, index)
     def setEditorData(self, widget, index):
         if isinstance(widget, QComboBox):
-            widget.setCurrentText(index.data() or '')
+            field = TABLES[self.editor.current_table][index.column()]
+            widget.setCurrentText(display_value(field, index.data()))
         else:
             super().setEditorData(widget, index)
     def setModelData(self, widget, model, index):
         if isinstance(widget, QComboBox):
-            model.setData(index, widget.currentText(), Qt.EditRole)
+            field = TABLES[self.editor.current_table][index.column()]
+            model.setData(index, raw_value(field, widget.currentText()), Qt.EditRole)
         else:
             super().setModelData(widget, model, index)
 
@@ -70,19 +79,16 @@ class ModelEditor(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(label('模型数据', 'PageTitle'))
-        outer.addWidget(label('SIMLOX 2017 原始字典 + 明确标注的 SimLab 扩展表', 'Muted'))
+        outer.addWidget(label(f'当前支持的 {len(SUPPORTED)} 张建模表 · 中文显示', 'Muted'))
         splitter = QSplitter()
         outer.addWidget(splitter, 1)
         left = QWidget()
         ll = QVBoxLayout(left)
         ll.setContentsMargins(0, 10, 8, 0)
         self.search = QLineEdit()
-        self.search.setPlaceholderText('搜索表名、字段代码…')
+        self.search.setPlaceholderText('搜索表名、字段名称…')
         self.search.textChanged.connect(self.filter_tree)
         ll.addWidget(self.search)
-        self.all_tables = QCheckBox(f'显示全部 {len(TABLES)} 张表（含扩展）')
-        self.all_tables.toggled.connect(self.filter_tree)
-        ll.addWidget(self.all_tables)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.itemSelectionChanged.connect(self.tree_selected)
@@ -92,7 +98,7 @@ class ModelEditor(QWidget):
         ml = QVBoxLayout(middle)
         ml.setContentsMargins(3, 10, 3, 0)
         top = QHBoxLayout()
-        self.title = label('Item · 备件 / 部件')
+        self.title = label('备件 / 部件')
         self.title.setStyleSheet('font-size:16px; font-weight:650;')
         top.addWidget(self.title)
         top.addStretch()
@@ -128,15 +134,15 @@ class ModelEditor(QWidget):
         splitter.addWidget(self.info)
         splitter.setSizes([225, 800, 245])
         self.nodes = {}
-        groups = {}
-        for name in TABLES:
-            group = category(name)
-            if group not in groups:
-                groups[group] = QTreeWidgetItem(self.tree, [group])
-            node = QTreeWidgetItem(groups[group], [f'{name}  {table_label(name) if table_label(name) != name else ""}'])
-            node.setData(0, Qt.UserRole, name)
-            node.setToolTip(0, f'{name} · {len(TABLES[name])} 字段')
-            self.nodes[name] = node
+        for group, names in MODELING_GROUPS.items():
+            parent = QTreeWidgetItem(self.tree, [group])
+            for name in names:
+                if name not in SUPPORTED:
+                    continue
+                node = QTreeWidgetItem(parent, [table_label(name)])
+                node.setData(0, Qt.UserRole, name)
+                node.setToolTip(0, f'{name} · {len(TABLES[name])} 字段')
+                self.nodes[name] = node
         self.tree.expandAll()
         self.filter_tree()
     def set_project(self, project):
@@ -145,8 +151,8 @@ class ModelEditor(QWidget):
     def filter_tree(self):
         term = self.search.text().strip().lower()
         for name, node in self.nodes.items():
-            haystack = name + ' ' + table_label(name) + ' ' + ' '.join(f['id'] for f in TABLES[name])
-            visible = (self.all_tables.isChecked() or name in SUPPORTED or bool(term)) and term in haystack.lower()
+            haystack = name + ' ' + table_label(name) + ' ' + ' '.join(f['id']+' '+field_label(f) for f in TABLES[name])
+            visible = term in haystack.lower()
             node.setHidden(not visible)
         for i in range(self.tree.topLevelItemCount()):
             group = self.tree.topLevelItem(i)
@@ -165,10 +171,10 @@ class ModelEditor(QWidget):
         self.grid.clear()
         self.grid.setColumnCount(len(fields))
         self.grid.setRowCount(len(rows))
-        self.grid.setHorizontalHeaderLabels([f"{f['id']}\n{field_label(f)}" for f in fields])
+        self.grid.setHorizontalHeaderLabels([field_label(f) for f in fields])
         for col, field in enumerate(fields):
             self.grid.setColumnWidth(col, 165 if len(field_label(field)) > 12 else 135)
-            self.grid.horizontalHeaderItem(col).setToolTip(f"{field['description']}\n单位: {field['unit'] or '无量纲 / 文本'}\n{field['constraints']}")
+            self.grid.horizontalHeaderItem(col).setToolTip(f"原始代码：{field['id']}\n单位：{UNIT_LABELS.get(field['unit'], field['unit'])}\n{constraint_label(field)}")
         for i, row in enumerate(rows):
             for j, field in enumerate(fields):
                 raw = row.get(field['id'], '')
@@ -178,9 +184,9 @@ class ModelEditor(QWidget):
                     item.setForeground(QColor('#8fc5ff'))
                 if displayed_default:
                     item.setForeground(QColor('#91a5bf'))
-                    item.setToolTip('留空时使用默认值：' + field['default'])
+                    item.setToolTip('留空时使用默认值：' + display_value(field, field['default']))
                 self.grid.setItem(i, j, item)
-        self.title.setText(f'{name} · {table_label(name)}')
+        self.title.setText(table_label(name))
         self.count_label.setText(f'{len(rows)} 行 / {len(fields)} 字段')
         self.support_label.setText('双击编辑 · Ctrl+C / Ctrl+V 可与 Excel 交换 · 留空字段按字典默认值解释。' if name in SUPPORTED else '此表可编辑、保存和交换；本版引擎暂不支持计算，含数据时会阻止运行。')
         self.loading = False
@@ -206,18 +212,25 @@ class ModelEditor(QWidget):
         supported = field['id'] in SUPPORTED.get(self.current_table, set()) | DOCUMENTARY
         def line(title, content):
             return f'<p style="color:#9fb4d1;margin-bottom:3px">{title}</p><p style="margin-top:0;color:#dce8fa">{esc(str(content or "—"))}</p>'
-        text = f'<h3 style="color:#8fc5ff">{esc(field["id"])}</h3><b>{esc(field_label(field))}</b>'
+        text = f'<h3 style="color:#8fc5ff">{esc(field_label(field))}</h3>'
         if self.current_table.startswith('SimLab'):
-            text += '<p>SimLab 独立扩展；不是 SIMLOX 原厂字段。</p>'
-        text += line('原始定义', field['description'])
-        text += line('数据类型 / 字段类型', field['type']+' / '+field['kind'])
-        text += line('基本单位', field['unit'])
-        text += line('默认值', field['default'])
-        text += line('约束', field['constraints'])
-        text += line('关联表', field['references'])
+            text += '<p>本软件独立扩展字段。</p>'
+        text += line('数据类型 / 字段类型', TYPE_LABELS[field['type']]+' / '+TYPE_LABELS[field['kind']])
+        text += line('基本单位', UNIT_LABELS.get(field['unit'], field['unit']))
+        text += line('默认值', display_value(field, field['default']) or '留空')
+        text += line('约束', constraint_label(field))
+        text += line('关联表', references_label(field))
         text += line('计算支持', '支持基础规则，具体值在运行前校验' if supported else '保存与交换；仅允许不改变基础模型的默认值参与本版运行')
         if field['id'] == 'FRT':
-            text += '<p style="color:#f3c77a">FRT 按每百万运行参数单位计。OPHOURS 下 MTBF = 1,000,000 / FRT 小时。</p>'
+            text += '<p style="color:#f3c77a">故障率按每百万运行参数单位计。按运行小时计时：平均故障间隔 = 1,000,000 ÷ 故障率（小时）。</p>'
+        if field['id'] == 'DAILY_READY':
+            text += '<p>选“是”时，每天首波健康地面飞机假定已提前准备好；故障飞机不会自动修复。</p>'
+        if field['id'] == 'PREP_H':
+            text += '<p>回收或修复后，一次完整再次出动准备所需的时间；每日首波就绪假设除外。</p>'
+        if field['id'] == 'PREP_TASK':
+            text += '<p>引用维修与保障作业及其资源需求；留空表示准备过程无资源容量约束。</p>'
+        if field['id'] == 'PRIORITY':
+            text += '<p>数值越小越优先，不抢占已分配资源。</p>'
         self.info.setHtml('<div style="font-family:Microsoft YaHei UI;font-size:12px;padding:10px">'+text+'</div>')
     def selected_field(self, row, col, prevrow, prevcol):
         if not self.loading:self.refresh_timing()
@@ -258,7 +271,8 @@ class ModelEditor(QWidget):
             rows.append(defaults(self.current_table))
         for i, cells in enumerate(data):
             for j, text in enumerate(cells):
-                rows[row+i][TABLES[self.current_table][col+j]['id']] = text
+                field = TABLES[self.current_table][col+j]
+                rows[row+i][field['id']] = raw_value(field, text)
         self.select_table(self.current_table)
         self.changed.emit()
     def import_csv(self):

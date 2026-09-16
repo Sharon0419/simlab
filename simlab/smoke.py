@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import time
+import sys
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QFont
 from PySide6.QtWidgets import QApplication
@@ -21,6 +22,8 @@ def run(directory):
     app.setFont(QFont('Microsoft YaHei UI', 10))
     window = MainWindow(directory/'userdata', restore=False)
     failures = []
+    previous_hook = sys.excepthook
+    sys.excepthook = lambda kind, error, trace: failures.append(f'Qt callback {kind.__name__}: {error}')
     window.warn = lambda title, message: failures.append(title+': '+message)
     window.show()
     QTest.qWait(150)
@@ -31,7 +34,7 @@ def run(directory):
     QTest.qWait(100)
     assert window.editor.grid.rowCount() == 3
     assert window.editor.grid.columnCount() == 18
-    assert window.editor.grid.horizontalHeaderItem(2).text().startswith('FRT')
+    assert window.editor.grid.horizontalHeaderItem(2).text() == '故障率'
     window.editor.grid.item(0, 2).setText('1300')
     assert window.project['tables']['Item'][0]['FRT'] == '1300'
     window.save()
@@ -335,7 +338,99 @@ def run(directory):
     assert import_package(directory/'ground.simproj')['runs'][-1]['result']==ground_run['result']
     output['checks']+=['project library search','model copy preserves original','ground resource input persistence',
         'ground worker and aggregation','ground jobs and metrics views','all preparation CSV','format6 roundtrip']
+    # v0.9 calendar maintenance: edit, worker, result table and all-round export.
+    tables=window.project['tables']
+    tables['SystemDeployment'][0]['QTYPS']='2'
+    tables['SimLabPlannedMaintenance']=[dict(PMID='CALENDAR_CHECK',SID=tables['System'][0]['SID'],
+        USTID=tables['SystemDeployment'][0]['USTID'],FIRST_H='9',INTERVAL_H='24',DURATION_H='1',TASK='GROUND_PREP')]
+    window.editor.select_table('SimLabPlannedMaintenance')
+    assert window.editor.grid.rowCount()==1 and window.editor.grid.columnCount()==7
+    assert window.save()
+    window.nav.setCurrentRow(2);window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button,Qt.LeftButton)
+    deadline=time.monotonic()+60
+    while window.process is not None and time.monotonic()<deadline:QTest.qWait(50)
+    assert window.process is None and not failures,failures
+    planned_run=window.project['runs'][-1]
+    assert planned_run['status']=='completed',planned_run
+    pm=planned_run['result']['mission']['planned']
+    assert pm['due_jobs']==pm['completed_jobs']==6 and pm['work_aircraft_hours']==6
+    assert window.planned_jobs.rowCount()==6
+    assert window.downtime_table.rowCount()==6
+    from .flight_results import export_planned
+    export_planned(planned_run,directory/'planned.csv')
+    with (directory/'planned.csv').open(encoding='utf-8-sig',newline='') as file:
+        assert len(list(csv.DictReader(file)))==18
+    window.result_tabs.setCurrentIndex(18)
+    QTest.qWait(100);window.grab().save(str(directory/'18-planned-maintenance.png'))
+    export_package(window.project,directory/'planned.simproj')
+    assert import_package(directory/'planned.simproj')['runs'][-1]['result']==planned_run['result']
+    output['checks']+=['calendar maintenance input','calendar worker and accounting',
+        'calendar result view','all planned maintenance CSV','format7 roundtrip']
+    # v0.9.1: per-aircraft flight clocks and mixed maintenance through the worker.
+    tables=window.project['tables']
+    tables['SimLabFlightInspection']=[dict(CHECKID='HOURS',SID=tables['System'][0]['SID'],
+        USTID=tables['SystemDeployment'][0]['USTID'],INTERVAL_H='2',DURATION_H='.5',TASK='GROUND_PREP')]
+    tables['SimLabInspectionInitial']=[dict(CHECKID='HOURS',ASSET_NO='1',INITIAL_H='1')]
+    window.editor.select_table('SimLabFlightInspection')
+    assert window.editor.grid.rowCount()==1 and window.editor.grid.columnCount()==6
+    assert window.save()
+    window.nav.setCurrentRow(2);window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button,Qt.LeftButton)
+    deadline=time.monotonic()+60
+    while window.process is not None and time.monotonic()<deadline:QTest.qWait(50)
+    assert window.process is None and not failures,failures
+    inspection_run=window.project['runs'][-1]
+    assert inspection_run['status']=='completed'
+    pm=inspection_run['result']['mission']['planned']
+    assert len(pm['clocks'])==window.inspection_clocks.rowCount()==2
+    assert window.inspection_jobs.rowCount()>0
+    for c in pm['clocks']:
+        jobs=[j for j in pm['jobs'] if j.get('trigger')=='flight_hours' and j['asset']==c['asset'] and j['status']=='completed']
+        assert abs(c['initial_hours']+c['flown_hours']-c['hours_since_check']-sum(j['cycle_hours'] for j in jobs))<1e-8
+    from .flight_results import export_inspection_clocks
+    export_inspection_clocks(inspection_run,directory/'inspection-clocks.csv')
+    export_planned(inspection_run,directory/'inspection-jobs.csv')
+    with (directory/'inspection-clocks.csv').open(encoding='utf-8-sig',newline='') as file:
+        assert len(list(csv.DictReader(file)))==6
+    window.result_tabs.setCurrentIndex(19)
+    QTest.qWait(100);window.grab().save(str(directory/'19-flight-inspection.png'))
+    export_package(window.project,directory/'inspection.simproj')
+    assert import_package(directory/'inspection.simproj')['runs'][-1]['result']==inspection_run['result']
+    output['checks']+=['inspection input','inspection worker and clocks','inspection clock conservation',
+                       'inspection results and CSV','format8 roundtrip']
+    tables=window.project['tables']
+    iid=tables['Item'][0]['IID']
+    tables['Item'][0]['FRT']='0'
+    tables['SimLabItemAging']=[dict(IID=iid,SHAPE='2',SCALE_H='2',INITIAL_H='1',REPAIR='PERFECT')]
+    window.editor.select_table('SimLabItemAging')
+    assert window.editor.grid.columnCount()==5 and window.editor.grid.rowCount()==1
+    assert window.save()
+    window.nav.setCurrentRow(2);window.repetitions.setValue(3)
+    QTest.mouseClick(window.run_button,Qt.LeftButton)
+    deadline=time.monotonic()+60
+    while window.process is not None and time.monotonic()<deadline:QTest.qWait(50)
+    assert window.process is None and not failures,failures
+    age_run=window.project['runs'][-1]
+    assert age_run['status']=='completed',age_run
+    assert window.age_instances.rowCount()>0
+    assert window.age_events.rowCount()>0
+    assert any(e['event']=='repair' for e in age_run['result']['aging']['events'])
+    assert len(age_run['result']['replication_results'])==3
+    from .flight_results import export_aging
+    export_aging(age_run,directory/'ages.csv')
+    export_aging(age_run,directory/'age-events.csv',True)
+    for rep in age_run['result']['replication_results']:
+        assert all(r['age']<=r['lifetime_hours']+1e-8 for r in rep['aging']['instances'])
+        assert all(e['age_after']==0 for e in rep['aging']['events'] if e['event']=='repair')
+    window.result_tabs.setCurrentIndex(20)
+    QTest.qWait(100);window.grab().save(str(directory/'20-component-aging.png'))
+    export_package(window.project,directory/'aging.simproj')
+    assert import_package(directory/'aging.simproj')['runs'][-1]['result']==age_run['result']
+    output['checks']+=['aging input','aging worker','repair age updates','aging results and CSV','format9 roundtrip']
     window.close()
     app.processEvents()
+    sys.excepthook = previous_hook
+    assert not failures, failures
     (directory/'smoke-result.json').write_text(json.dumps(output, indent=2), encoding='utf-8')
     return 0

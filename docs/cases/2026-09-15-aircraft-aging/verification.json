@@ -1,0 +1,17 @@
+{
+  "legacy_1000_equal": true,
+  "PERFECT": {
+    "replications": 1000,
+    "repairs": 1576,
+    "failures": 1.577,
+    "success_rate": 0.1908888888888889,
+    "age_conservation": true
+  },
+  "MINIMAL": {
+    "replications": 1000,
+    "repairs": 1576,
+    "failures": 1.577,
+    "success_rate": 0.1908888888888889,
+    "age_conservation": true
+  }
+}

@@ -1,5 +1,5 @@
 """Explicit SimLab-owned inputs; never modify the original SIMLOX dictionary."""
-VERSION = 6
+VERSION = 9
 
 
 def field(name, kind, description, type='Text', default='', references='', unit=''):
@@ -32,3 +32,37 @@ TABLES['SimLabFlightRule'] = [
     field('DAILY_READY', 'Regular', '每天首波健康地面飞机假定已提前准备好：Y或N', default='N'),
 ]
 TABLES['SimLabFlightRule'][-1]['constraints']='Multiple choice: Y, N'
+
+TABLES['SimLabPlannedMaintenance'] = [
+    field('PMID', 'Index', '计划维修标识'),
+    field('SID', 'Mandatory', '适用系统', references='System SID'),
+    field('USTID', 'Mandatory', '部署单位或站点', references='Unit UNID, Station STID'),
+    field('FIRST_H', 'Mandatory', '首次到期时刻', 'Floating point', unit='Hours'),
+    field('INTERVAL_H', 'Regular', '重复间隔；零为仅一次', 'Floating point', '0', unit='Hours'),
+    field('DURATION_H', 'Mandatory', '每次固定维修时长', 'Floating point', unit='Hours'),
+    field('TASK', 'Regular', '维修资源作业；留空无资源约束', references='Tasks TID'),
+]
+
+TABLES['SimLabFlightInspection'] = [
+    field('CHECKID', 'Index', '飞行小时检查标识'),
+    field('SID', 'Mandatory', '适用系统', references='System SID'),
+    field('USTID', 'Mandatory', '部署单位或站点', references='Unit UNID, Station STID'),
+    field('INTERVAL_H', 'Mandatory', '每次检查之间的累计在空小时', 'Floating point', unit='Hours'),
+    field('DURATION_H', 'Mandatory', '固定检查作业时长', 'Floating point', unit='Hours'),
+    field('TASK', 'Regular', '检查资源作业；留空无资源约束', references='Tasks TID'),
+]
+TABLES['SimLabInspectionInitial'] = [
+    field('CHECKID', 'Index', '飞行小时检查标识', references='SimLabFlightInspection CHECKID'),
+    field('ASSET_NO', 'Index', '该部署内飞机序号，从一开始', 'Integer'),
+    field('INITIAL_H', 'Regular', '距本项上次检查已飞小时', 'Floating point', '0', unit='Hours'),
+]
+TABLES['SimLabInspectionInitial'][1]['constraints'] = 'Positive integer'
+
+TABLES['SimLabItemAging'] = [
+    field('IID', 'Index', '适用叶子部件', references='Item IID'),
+    field('SHAPE', 'Regular', '寿命形状参数，一至十；一为恒定故障风险', 'Floating point', '1'),
+    field('SCALE_H', 'Mandatory', '寿命尺度小时，不等于平均寿命', 'Floating point', unit='Hours'),
+    field('INITIAL_H', 'Regular', '初始装机有效运行年龄；初始库存为新件', 'Floating point', '0', unit='Hours'),
+    field('REPAIR', 'Regular', '故障维修后的年龄处理方式', default='PERFECT'),
+]
+TABLES['SimLabItemAging'][-1]['constraints'] = 'Multiple choice: PERFECT, MINIMAL'

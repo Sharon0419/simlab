@@ -71,22 +71,22 @@ class Workshop:
             process = self.config['depot_processes'][(station, iid)]
             yield from self.work(job, 'diagnosis', process['diagnosis'])
             broken = [c for c in self.parts.records[part]['children'] if self.parts.records[c]['broken']]
-            assert len(broken) == 1, 'Expected one failed SRU in serial model'
-            child = broken[0]
-            child_iid = self.parts.records[child]['iid']
-            rule = self.config['replacements'][(iid, child_iid, station)]
-            # Sample total replacement once, then split consistently with base replacement.
-            mean = rule['time']['mean']
-            total = float(self.rng.exponential(mean)) if mean and rule['time']['random'] else mean
-            fixed = {'time': {'mean': total, 'random': False}, 'resources': rule['resources']}
-            yield from self.work(job, 'remove', fixed, self.config['remove_fraction'])
-            index = self.parts.detach(part, child)
-            self.env.process(self.repair_sru(station, child, part))
-            self.phase(job, 'wait_sru')
-            replacement = yield self.store(station, child_iid).get()
-            self.parts.move(replacement, 'held', station)
-            yield from self.work(job, 'install', fixed, 1-self.config['remove_fraction'])
-            self.parts.attach(part, index, replacement)
+            assert broken, 'Expected failed SRU in returned LRU'
+            for child in broken:
+                child_iid = self.parts.records[child]['iid']
+                rule = self.config['replacements'][(iid, child_iid, station)]
+                # Sample total replacement once, then split consistently with base replacement.
+                mean = rule['time']['mean']
+                total = float(self.rng.exponential(mean)) if mean and rule['time']['random'] else mean
+                fixed = {'time': {'mean': total, 'random': False}, 'resources': rule['resources']}
+                yield from self.work(job, 'remove', fixed, self.config['remove_fraction'])
+                index = self.parts.detach(part, child)
+                self.env.process(self.repair_sru(station, child, part))
+                self.phase(job, 'wait_sru')
+                replacement = yield self.store(station, child_iid).get()
+                self.parts.move(replacement, 'held', station)
+                yield from self.work(job, 'install', fixed, 1-self.config['remove_fraction'])
+                self.parts.attach(part, index, replacement)
             yield from self.work(job, 'test', process['test'])
         else:
             yield from self.work(job, 'repair', self.config['repairs'][(station, iid)])

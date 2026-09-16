@@ -64,3 +64,25 @@
 success_point是计划绝对小时；success_at是实际达到该点的小时（失败时为空）；success_phase为该点的OUT/ON_STATION/BACK阶段，若位于计划落地则LANDED。success_reason使用稳定代码，界面给中文解释；successful_members为成功飞机ID数组。取消的members与successful_members均为空。
 
 旧结果没有成功字段时显示未计算，不按0计，也不按完整完成数反推。CSV空值表示历史不支持，零表示已计算且没有发生。案例报告的95%均值区间与P05/P95为独立重复试验统计，未映射原厂STLOW等结果设置。
+
+## v0.9 日历计划维修
+
+v0.9.1扩展：mission.planned汇总日历维修与飞行小时检查；clocks为首轮逐架/逐检查计时，全部轮次保存在replication_results。initial_hours+flown_hours=已完成检查cycle_hours之和+hours_since_check。overrun_hours=max(0,cycle_hours-interval_hours)，已完成工单保留历史超限，当前时钟完成后归零。不同检查共享同一飞机在空经历，不能相加当作总飞行时间。混合工单CSV的trigger区分calendar/flight_hours，日历工单的检查计时列为空。计时CSV含每轮编号及模型哈希。
+
+`mission.planned`保存跨轮均值和首轮工单；`replication_results[*].mission.planned.jobs`保留全部工单。时刻从仿真开始计，单位小时。
+
+| 字段 | 口径 |
+|---|---|
+| due_jobs | 已到期工单数；等于完成、等待前序、等待资源和作业中四类之和 |
+| due_at / requested_at / started_at / ended_at | 到期、申请资源、实际开始、完成；未发生的时刻为空 |
+| deferred_hours | 从到期到申请资源或期末；包含在飞、故障修复、已有准备和前序计划等待 |
+| wait_hours | 从资源申请到实际开始或期末；包含资源队列和班次等待 |
+| work_hours | 实际开始至完成或期末；完成工单等于输入固定时长 |
+| planned_wait / planned_maintenance | downtime中每台平均资源等待/作业停机小时，参与可用度积分 |
+
+同一飞机可有多个积压工单，工单延后时间可能重叠，不能把deferred_hours之和当作飞机停机时间。等待落地的工单不提前中止飞行；计划作业不会把故障件变为健康，也不重置剩余故障时钟。未配置计划时旧结果不增加这些键。
+
+
+## v0.9.2部件年龄
+
+有效年龄 age：初始装机年龄加实际运行小时乘UTIL，减去修复如新清零的年龄。终身运行 lifetime_hours：初始年龄加本轮累计运行小时，不随维修减少。恒等式：终身运行小时=当前有效年龄+历次维修抹去年龄之和。库存、运输、维修、准备及待命不累计；故障返航中仅健康叶子继续运行。风险倍数不改变年龄。首轮表格和全轮CSV均标注范围；年龄明细每轮各10000条上限。

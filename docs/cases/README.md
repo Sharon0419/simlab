@@ -1,4 +1,12 @@
+# 新增M2老化案例
+
+[飞机部件老化：修复如新与最小修复](2026-09-15-aircraft-aging/评估报告.md)，各1000轮，保留日历维修与小时检查。
+
 # 可复现案例
+
+v0.9.1新增：[飞行小时检查](2026-09-15-aircraft-inspection/评估报告.md)。1000轮混合日历与小时维修、逐架初始小时、41778工单和12000条计时；复现tools/run_aircraft_inspection_case.py，便携版重放加--verify-only --exe dist/SimLab/SimLab.exe。
+
+v0.9新增：[日历计划维修案例](2026-09-15-aircraft-planned/评估报告.md)。在v0.8主方案上添加每天10点全机队到期、固定1小时计划维修。脚本tools/run_aircraft_planned_case.py生成1000轮结果、全轮工单、项目包，并核对旧案例无新增规则时保持原数值。
 
 v0.8当前案例：[再次出动保障资源对照](2026-09-11-aircraft-ground/评估报告.md)。12架、每波2架、半小时完整准备、每日首波健康机假定已准备，1/2/4组各1000轮；另有2架无故障紧周转确定性验收。统一启动后从项目库选择，复现脚本为`tools/run_aircraft_ground_case.py`，依次prepare/run/report。旧版本案例继续保留用于回溯。
 

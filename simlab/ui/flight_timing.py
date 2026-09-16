@@ -73,7 +73,7 @@ class FlightTiming(QWidget):
         self.summary.setText(prefix+f'{clock(start)} 起飞 → {clock(start+out/60)} 进入任务区 → '
             f'{clock(start+(duration-back)/60)} 返航 → {clock(start+duration/60)} 落地\n'
             f'任务区 {duration-out-back:g} 分；成功点 {clock(start+success/60)}（{success/duration:.2%}）。'
-            '成功后仍可能中止；同刻故障算已达成功点。点击应用后保存原字段 DURN/TFOUT/TFRET/MSUCPT；需配置飞行规则。')
+            '成功后仍可能中止；同刻故障算已达成功点。点击应用后更新任务时长、出返航比例和成功点；需配置飞行规则。')
 
     def apply(self):
         if self.row is None or not self.apply_button.isEnabled():return
