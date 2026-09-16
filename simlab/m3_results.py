@@ -33,7 +33,7 @@ VALUES = {
     'IN_PLACE': '原位维修', 'REPLACE': '换件维修', 'MIXED': '按比例选择', 'OFF_ITEM': '拆下件维修',
     'OPERATING': '有效运行小时', 'CALENDAR': '日历小时',
     'THRESHOLD': '临界库存', 'PERIODIC': '周期调运',
-    'queued': '已排队', 'waiting_resource': '等待资源', 'working': '作业中',
+    'queued': '已排队', 'starting': '准备开始', 'waiting_resource': '等待资源', 'working': '作业中',
     'waiting_spare': '等待备件', 'transport': '送修运输', 'completed': '已完成',
     'covered_by_corrective': '已由修复性维修覆盖', 'pending': '待满足',
     'threshold': '临界库存', 'periodic': '周期调运', 'initial': '初始检查',
@@ -62,6 +62,9 @@ def snapshot(result, section, replication=0):
 
 
 def truncated(data, dataset):
+    details = (data.get('detail_counts') or {}).get(dataset)
+    if isinstance(details, dict):
+        return bool(details.get('truncated', False))
     flags = data.get('truncated', False)
     if isinstance(flags, dict):
         flags = flags.get(dataset, False)
@@ -69,8 +72,10 @@ def truncated(data, dataset):
 
 
 def detail_total(data, dataset):
-    return (data.get('detail_counts') or {}).get(dataset,
-        data.get(dataset + '_total', len(data.get(dataset) or [])))
+    details = (data.get('detail_counts') or {}).get(dataset)
+    if isinstance(details, dict):
+        return details['total']
+    return details if details is not None else data.get(dataset + '_total', len(data.get(dataset) or []))
 
 
 def export_m3(run, path, section, dataset):

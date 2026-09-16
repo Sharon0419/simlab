@@ -56,6 +56,19 @@ def test_service_truncation_uses_full_job_count(tmp_path):
     assert rows[0]['details_truncated'] == 'True'
 
 
+def test_supply_dataset_counts_do_not_leak_other_dataset_truncation(tmp_path):
+    data = {'orders': [{'id': 'O1'}], 'stocks': [{'station': 'A'}], 'truncated': True,
+            'detail_counts': {'orders': {'total': 3, 'retained': 1, 'truncated': True},
+                              'stocks': {'total': 1, 'retained': 1, 'truncated': False}}}
+    run = {'id': 'supply', 'result': {'supply': data}}
+    for dataset, count, flag in [('orders', '3', 'True'), ('stocks', '1', 'False')]:
+        path = tmp_path / (dataset + '.csv')
+        module().export_m3(run, path, 'supply', dataset)
+        row = list(csv.DictReader(path.open(encoding='utf-8-sig', newline='')))[0]
+        assert row['detail_total'] == count
+        assert row['details_truncated'] == flag
+
+
 def test_legacy_export_fails_clearly_without_creating_file(tmp_path):
     path = tmp_path / 'not-m3.csv'
     with pytest.raises(ValueError, match='M3'):
