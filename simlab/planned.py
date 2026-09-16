@@ -3,6 +3,7 @@ import math
 from .operations import _check_common
 from .schema import value
 from .inspection import compile_inspections, InspectionClocks
+from .workflow_activity import configured_plan, aircraft_timing
 
 
 def compile_planned(tables, fleets, missions, capacity, schedules, horizon, reps):
@@ -16,7 +17,8 @@ def compile_planned(tables, fleets, missions, capacity, schedules, horizon, reps
         first = float(value('SimLabPlannedMaintenance', row, 'FIRST_H'))
         interval = float(value('SimLabPlannedMaintenance', row, 'INTERVAL_H'))
         duration = float(value('SimLabPlannedMaintenance', row, 'DURATION_H'))
-        if first >= horizon or duration <= 0:
+        plan = configured_plan(tables, 'CALENDAR', name)
+        if first >= horizon or (not plan and duration <= 0):
             errors.append(f'SimLabPlannedMaintenance.{name}: 首次到期须小于仿真时长，维修时长须大于零。')
             continue
         span_count = (horizon-first)/interval if interval else 1
@@ -25,6 +27,8 @@ def compile_planned(tables, fleets, missions, capacity, schedules, horizon, reps
             continue
         count = max(0, math.ceil(span_count))
         tid = value('SimLabPlannedMaintenance', row, 'TASK')
+        if plan:
+            tid = ''
         needs = {r['RID']: int(float(r['QTY'])) for r in tables.get('TaskResource', [])
                  if r['TID'] == tid and int(float(r['QTY'])) > 0}
         if tid and not needs:
@@ -103,9 +107,12 @@ class PlannedMaintenance:
                     self.manager.workflow_runner.advance()
                     starts = [n['started_at'] for n in workflow['nodes'] if n['started_at'] is not None]
                     if starts and job['started_at'] is None:
-                        job.update(status='working', started_at=min(starts))
-                        self.set_state(asset, 'planned_maintenance')
-                        asset['flight_phase'] = 'planned_maintenance'
+                        job['started_at'] = min(starts)
+                    working = any(n['status'] == 'working' for n in workflow['nodes'])
+                    job['status'] = 'working' if working else 'waiting'
+                    phase = 'planned_maintenance' if working else 'planned_wait'
+                    self.set_state(asset, phase)
+                    asset['flight_phase'] = phase
                 finished = workflow['status'] == 'completed' if workflow else (
                     job['status'] == 'working' and job['started_at']+job['duration'] <= self.env.now)
                 if finished:
@@ -114,7 +121,7 @@ class PlannedMaintenance:
                     queue.pop(0)
                     self.active.pop(aid)
                     if workflow:
-                        job['duration'] = self.env.now-job['started_at']
+                        job['duration'] = aircraft_timing(workflow, self.resources, self.env.now)['work_hours']
                     else:
                         self.resources.release(job['station'], job['resources'])
                     self.set_state(asset, 'available')
@@ -166,10 +173,12 @@ class PlannedMaintenance:
             if '_clock' in j:
                 hours = j.get('cycle_hours',j['_clock']['hours'])
                 extra = dict(cycle_hours=hours,overrun_hours=max(0,hours-j['interval_hours']))
+            timing = dict(wait_hours=started-requested, work_hours=end-started)
+            if '_workflow' in j:
+                timing = aircraft_timing(j['_workflow'], self.resources, self.env.now)
             jobs.append({**{k:v for k,v in j.items() if not k.startswith('_')},**extra,
                          'deferred_hours': requested-j['due_at'],
-                         'wait_hours': started-requested,
-                         'work_hours': end-started})
+                         **timing})
         result = dict(jobs=jobs, due_jobs=len(jobs),
                     completed_jobs=sum(j['status']=='completed' for j in jobs),
                     deferred_jobs=sum(j['status']=='deferred' for j in jobs),

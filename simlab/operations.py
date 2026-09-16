@@ -4,6 +4,7 @@ This is a documented execution subset, not an implementation of all SIMLOX
 mission semantics. All times are absolute hours from simulation start.
 """
 from .schema import value
+from .workflow_activity import configured_plan
 
 
 SUPPORTED_OPERATIONS = {
@@ -101,7 +102,12 @@ def compile_operations(tables, fleets, capacity, repairs, replacements, horizon,
     for r in tables.get('SimLabFlightRule',[]):
         tid=val('SimLabFlightRule',r,'PREP_TASK')
         ready=val('SimLabFlightRule',r,'DAILY_READY')=='Y'
-        if tid or ready:
+        plan = configured_plan(tables, 'PREPARATION', r['MTID'])
+        if tid or ready or plan:
+            if plan:
+                # Workflow steps replace the old task, but PREP_H remains the
+                # scheduling lead and DAILY_READY remains an activity policy.
+                tid = ''
             needs={x['RID']:int(val('TaskResource',x,'QTY')) for x in tables.get('TaskResource',[]) if x['TID']==tid and int(val('TaskResource',x,'QTY'))>0}
             if tid and not needs:errors.append(f'SimLabFlightRule.{r["MTID"]}: PREP_TASK须配置正数量TaskResource。')
             ground_rules[r['MTID']]=dict(task=tid,resources=needs,daily_ready=ready)

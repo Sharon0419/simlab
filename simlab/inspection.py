@@ -2,6 +2,7 @@
 import math
 from .schema import value
 from .operations import _check_common
+from .workflow_activity import configured_plan
 
 
 def compile_inspections(tables, fleets, missions, capacity, schedules, horizon):
@@ -17,10 +18,13 @@ def compile_inspections(tables, fleets, missions, capacity, schedules, horizon):
         f = targets[0]
         interval = float(value(name,row,'INTERVAL_H'))
         duration = float(value(name,row,'DURATION_H'))
-        if interval < 1e-6 or duration < 1e-6:
+        plan = configured_plan(tables, 'INSPECTION', cid)
+        if interval < 1e-6 or (not plan and duration < 1e-6):
             errors.append(f'{name}.{cid}: 检查间隔及作业时长须至少0.000001小时。')
             continue
         tid = value(name,row,'TASK')
+        if plan:
+            tid = ''
         needs = {r['RID']:int(float(r['QTY'])) for r in tables.get('TaskResource', [])
                  if r['TID']==tid and int(float(r['QTY']))>0}
         if tid and not needs:errors.append(f'{name}.{cid}: 资源作业须有正数量资源需求。')

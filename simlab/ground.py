@@ -1,4 +1,5 @@
-"""Single non-preemptive preparation operation using the shared resource pool."""
+"""Serialized aircraft preparation using a legacy operation or workflow."""
+from .workflow_activity import aircraft_timing
 
 
 class PreparationManager:
@@ -22,6 +23,7 @@ class PreparationManager:
     def integrate(self):
         elapsed=self.env.now-self.last
         for job in self.active.values():
+            if '_workflow' in job:continue
             if job['status']!='waiting':continue
             off_shift=any(not any(start<=self.last<end for start,end in self.resources.schedules.get((job['station'],rid),[(0,float('inf'))]))
                           for rid in job['resources'])
@@ -73,10 +75,12 @@ class PreparationManager:
                     work = job['_workflow']
                     starts = [n['started_at'] for n in work['nodes'] if n['started_at'] is not None]
                     if starts and job['started_at'] is None:
-                        job.update(status='working', started_at=min(starts))
-                        job['_asset']['flight_phase'] = 'preparing'
+                        job['started_at'] = min(starts)
+                    working = any(n['status'] == 'working' for n in work['nodes'])
+                    job['status'] = 'working' if working else 'waiting'
+                    job['_asset']['flight_phase'] = 'preparing' if working else 'waiting_preparation'
                     if work['status'] == 'completed':
-                        job['duration'] = self.env.now-job['started_at']
+                        job['duration'] = aircraft_timing(work, self.resources, self.env.now)['work_hours']
                         self.finish(job, 'completed')
                         changed = True
                     continue
@@ -112,15 +116,22 @@ class PreparationManager:
     def snapshot(self):
         self.integrate()
         jobs=[]
+        workflow_shift = workflow_resource = 0.
         for job in self.jobs:
             end=job['ended_at'] if job['ended_at'] is not None else self.env.now
             start=job['started_at']
+            timing = dict(wait_hours=(start if start is not None else end)-job['requested_at'],
+                          work_hours=end-start if start is not None else 0)
+            if '_workflow' in job:
+                timing = aircraft_timing(job['_workflow'], self.resources, self.env.now)
+                workflow_shift += timing['wait_shift_hours']
+                workflow_resource += timing['wait_resource_hours']
             jobs.append({**{k:v for k,v in job.items() if not k.startswith('_')},
-                         'wait_hours':(start if start is not None else end)-job['requested_at'],
-                         'work_hours':end-start if start is not None else 0})
+                         **timing})
         return dict(jobs=jobs,requested_jobs=len(jobs),completed_jobs=sum(j['status']=='completed' for j in jobs),
                     assumed_jobs=sum(j['status']=='assumed_ready' for j in jobs),
                     waiting_jobs=sum(j['status']=='waiting' for j in jobs),working_jobs=sum(j['status']=='working' for j in jobs),
                     wait_aircraft_hours=sum(j['wait_hours'] for j in jobs),work_aircraft_hours=sum(j['work_hours'] for j in jobs),
-                    wait_resource_aircraft_hours=self.wait_resource_hours,wait_shift_aircraft_hours=self.wait_shift_hours,
+                    wait_resource_aircraft_hours=self.wait_resource_hours+workflow_resource,
+                    wait_shift_aircraft_hours=self.wait_shift_hours+workflow_shift,
                     daily_assumed_ready_aircraft=self.assumed_ready)
