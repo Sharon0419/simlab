@@ -54,7 +54,7 @@ class M3ResultsPage(QWidget):
         self.table.setHorizontalHeaderLabels([LABELS.get(key, key) for key in columns])
         for i, row in enumerate(rows):
             for j, key in enumerate(columns):
-                self.table.setItem(i, j, QTableWidgetItem(display(row.get(key))))
+                self.table.setItem(i, j, QTableWidgetItem(display(row.get(key), key)))
         self.export_button.setEnabled(bool(data))
         if not data:
             self.notice.setText('本实验没有工序结果；配置工序方案后运行。' if self.section == 'workflows' else

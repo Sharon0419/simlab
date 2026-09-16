@@ -1,0 +1,20 @@
+{
+  "replications": 100,
+  "activities": {
+    "MAINTENANCE": 6886,
+    "PREPARATION": 2722,
+    "OFF_ITEM": 833,
+    "INSPECTION": 787,
+    "CALENDAR": 1192
+  },
+  "steps": {
+    "completed": 58232
+  },
+  "failures": 1925,
+  "physical_conservation": true,
+  "dependency_order": true,
+  "nonnegative_waits": true,
+  "activity_elapsed_verified": true,
+  "seed": 20260916,
+  "engine": "0.12.0"
+}

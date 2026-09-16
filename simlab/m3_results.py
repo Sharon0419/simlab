@@ -67,7 +67,9 @@ VALUES = {
 }
 
 
-def display(value):
+def display(value, field=None):
+    if field == 'activity' and value == 'CALENDAR':
+        return '日历检查'
     if value is None:
         return '—'
     if isinstance(value, bool):
