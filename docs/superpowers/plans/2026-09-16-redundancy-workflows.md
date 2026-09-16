@@ -76,4 +76,4 @@ Files: version files, `docs/V0.12.md`, `docs/VERIFICATION.md`, roadmap, `tools/v
 - [x] Run source desktop smoke with QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1; inspect screenshots.
 - [x] Build via `tools/build_windows.ps1` into isolated staging, run EXE smoke and compare deterministic new/old cases, package via existing release tool.
 - [x] Install side-by-side v0.12.0, update launcher, verify installed file hashes and executable smoke. Preserve user project library.
-- [ ] Document measured counts and limits, commit and push approved feature branch; verify remote hash. Update Obsidian progress and report completed artifacts without claiming unrun checks.
+- [x] Document measured counts and limits, commit and push approved feature branch; verify remote hash. Update Obsidian progress and report completed artifacts without claiming unrun checks.
