@@ -59,3 +59,12 @@ p['runs'].append({'id': uuid.uuid4().hex, 'name': '采购与寿命报废演示',
                   'source_revision': p['revision'], 'result': result})
 export_package(p, directory/'采购与寿命报废-含结果.simproj')
 print(f'Generated 2 lifecycle packages; availability={result["availability"]:.6f}')
+from simlab.workflow_sample import workflow_project
+p = workflow_project()
+export_package(p, directory/'冗余与保障多工序-模型.simproj', False)
+result = simulate(p['tables'])
+p['runs'].append({'id': uuid.uuid4().hex, 'name': '冗余与保障多工序演示', 'status': 'completed',
+                  'started': now(), 'snapshot': p['tables'].copy(), 'model_hash': model_hash(p['tables']),
+                  'source_revision': p['revision'], 'result': result})
+export_package(p, directory/'冗余与保障多工序-含结果.simproj')
+print(f'Generated 2 workflow packages; steps={len(result["workflows"]["steps"])}')

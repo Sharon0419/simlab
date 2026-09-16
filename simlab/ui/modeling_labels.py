@@ -38,6 +38,8 @@ CONSTRAINT_LABELS = {
 
 def display_value(field, value):
     value = '' if value is None else str(value)
+    if field['id'] == 'ACTIVITY' and value == 'CALENDAR':
+        return '日历检查'
     return VALUE_LABELS.get(value, value) if value in choices(field) else value
 
 

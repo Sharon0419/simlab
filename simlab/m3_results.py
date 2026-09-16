@@ -11,6 +11,7 @@ DATASETS = {
                 'retirements': '报废记录', 'lifetimes': '实物寿命台账'},
 }
 LABELS = {
+    'attempt': '尝试次数',
     'workflow': '流程实例', 'plan': '工序方案', 'activity': '活动类型', 'step': '工序',
     'name': '名称', 'action': '业务动作', 'ready_at': '紧前完成时刻/h',
     'requested_at': '申请资源时刻/h', 'resources': '资源需求', 'duration': '抽取作业时长/h',
@@ -43,6 +44,7 @@ LABELS = {
     'age': '有效年龄/h',
 }
 VALUES = {
+    'retry': '备件到限后重试',
     'MAINTENANCE': '在位维修', 'PREPARATION': '出动准备', 'INSPECTION': '飞行小时检查',
     'CUSTOM': '自定义作业', 'DIAGNOSE': '检测', 'REMOVE': '拆卸', 'INSTALL': '安装',
     'SERVICE': '实际维修', 'TEST': '测试', 'running': '进行中', 'waiting': '等待资源或班次',

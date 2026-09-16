@@ -80,6 +80,8 @@ def main():
     assert import_package(output/'m3.simproj')['runs'][0]['result'] == result
     (output/'input.json').write_text(json.dumps(tables, ensure_ascii=False, indent=2), encoding='utf-8')
     for section, datasets in DATASETS.items():
+        if not result.get(section):
+            continue
         for dataset in datasets:
             export_m3(run, output/f'{section}-{dataset}.csv', section, dataset)
     evidence.update(model_hash=result['model_hash'], seed=result['seed'], engine=result['engine'],
