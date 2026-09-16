@@ -27,3 +27,13 @@
 - 提交后配置及供应/维修集成：`pytest tests/test_m3_config.py tests/test_core.py tests/test_modeling_chinese.py tests/test_project_library.py tests/test_m3_supply.py tests/test_m3_service.py -q` → `94 passed in 10.08s`。
 - 完整回归：`.venv/Scripts/python.exe -m pytest -q` → `297 passed in 9.40s`。
 - `simlab.m3_sample.m3_project()` 已直接编译，规范化维修规则为 2 条，三级根站为 `CENTER`。
+
+## 追加边界修复（2026-09-16）
+
+- 父件换件会把仍附着子件的未开始 PM 工单带到维修目的站。若子件纠正性修复为 `MINIMAL` 且目的站纠正性方式可能为 `IN_PLACE`，编译器现在要求目的站 PM 规则能够执行源站已经可能抽中的全部方式；目的站 `MIXED` 因具备两套工序，可承接任一已抽方式。
+- 每个部署的顶层部件必须有显式新纠正性规则或旧 `ItemReplacement`；带子件父项按其可能方式继续验证使用站/维修目的站的子件纠正性上下文。
+- `CALENDAR` 预防时钟覆盖初始库存、维修返库和实际可达调运站点。散件必须在各站有 `SimLabRepairLocation`、送修路径及目的站 `PREVENTIVE` 的 `DIAGNOSE/SERVICE/TEST`；库存总成内附着叶子必须有该站父子 PM 规则。
+- 服务工单上限把超期 `INITIAL_H` 解释为 t=0 的一张待办，完成后才重新按完整周期计数；不再把初始超期量除以周期当成历史工单数。初始库存按零周期年龄计入可预测上界。
+- `TARGET_QTY` 与 `REORDER_QTY` 现在都显式要求非负整数，临界值为负会在通用 schema 校验阶段拒绝。
+- 本轮 RED：新增边界测试首次运行结果为 `5 failed, 31 passed`。
+- GREEN：`.venv/Scripts/python.exe -m pytest tests/test_m3_config.py -q` → `36 passed in 0.32s`；配置、维修运行时和完整 M3 样例 → `61 passed in 1.55s`；迁移回归 → `8 passed in 0.14s`。按任务要求未重复运行完整测试集。

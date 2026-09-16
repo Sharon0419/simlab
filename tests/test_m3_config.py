@@ -47,6 +47,9 @@ def one_leaf_new_service_tables():
     tables["StockAllocation"] = [r for r in tables["StockAllocation"] if r["IID"] == "POWER"]
     for name in ("SimLabSupplyRoute", "SimLabSupplyPolicy", "SimLabRepairLocation", "SimLabServiceRoute"):
         tables[name] = [r for r in tables[name] if r["IID"] == "POWER"]
+    tables["SimLabRepairLocation"].append(
+        {"IID": "POWER", "FROM_STID": "DEPOT", "REPAIR_STID": "DEPOT"}
+    )
     tables["ItemRepair"] = []
     tables["ItemReplacement"] = []
     tables["Tasks"].extend(
@@ -72,12 +75,64 @@ def one_leaf_new_service_tables():
         {"RULEID": "POWER-PM", "STEP": "TEST", "DURATION_H": "1", "TASK": "TEST"},
     ]
     tables["SimLabOffItemService"] = [
-        {"IID": "POWER", "STID": "DEPOT", "KIND": "CORRECTIVE", "STEP": step, "DURATION_H": "1", "TASK": task}
+        {"IID": "POWER", "STID": "DEPOT", "KIND": kind, "STEP": step, "DURATION_H": "1", "TASK": task}
+        for kind in ("CORRECTIVE", "PREVENTIVE")
         for step, task in (("DIAGNOSE", "DIAGNOSE"), ("SERVICE", "SERVICE"), ("TEST", "TEST"))
     ]
     tables["SimLabItemPreventive"] = [
         {"PMID": "POWER-PM-CLOCK", "IID": "POWER", "CLOCK": "CALENDAR", "INTERVAL_H": "100"}
     ]
+    return tables
+
+
+def nested_pending_pm_tables():
+    tables = one_leaf_new_service_tables()
+    tables["Item"][0].update(FRT="0", AFFRT="1")
+    tables["Item"].append({"IID": "BOARD", "TYPE": "SRU", "FRT": "0"})
+    tables["MaterielStructure"].append({"MID": "BOARD", "MMID": "POWER", "QTYPM": "1"})
+    tables["SimLabItemAging"] = [{
+        "IID": "BOARD", "SHAPE": "1", "SCALE_H": "1000", "INITIAL_H": "0", "REPAIR": "MINIMAL",
+    }]
+    tables["SimLabMaintenanceRule"] = []
+    tables["SimLabMaintenanceStep"] = []
+
+    def add_rule(ruleid, mid, iid, station, kind, method, probability=""):
+        tables["SimLabMaintenanceRule"].append({
+            "RULEID": ruleid, "MID": mid, "IID": iid, "STID": station,
+            "KIND": kind, "METHOD": method, "REPLACE_P": probability,
+        })
+        steps = [("TEST", "1")]
+        if method in ("IN_PLACE", "MIXED"):
+            steps.append(("IN_PLACE", "1"))
+        if method in ("REPLACE", "MIXED"):
+            steps.extend([("REMOVE", "1"), ("INSTALL", "1")])
+        tables["SimLabMaintenanceStep"].extend({
+            "RULEID": ruleid, "STEP": step, "DURATION_H": duration, "TASK": "SERVICE",
+        } for step, duration in steps)
+
+    add_rule("PARENT-CM", "VEHICLE", "POWER", "BASE", "CORRECTIVE", "REPLACE")
+    add_rule("CHILD-CM-D", "POWER", "BOARD", "DEPOT", "CORRECTIVE", "IN_PLACE")
+    add_rule("CHILD-PM-S", "POWER", "BOARD", "BASE", "PREVENTIVE", "REPLACE")
+    add_rule("CHILD-PM-D", "POWER", "BOARD", "DEPOT", "PREVENTIVE", "IN_PLACE")
+    tables["SimLabRepairLocation"] = [
+        {"IID": "POWER", "FROM_STID": "BASE", "REPAIR_STID": "DEPOT"},
+        {"IID": "BOARD", "FROM_STID": "BASE", "REPAIR_STID": "DEPOT"},
+        {"IID": "BOARD", "FROM_STID": "DEPOT", "REPAIR_STID": "DEPOT"},
+    ]
+    tables["SimLabServiceRoute"] = [
+        {"ROUTEID": f"{iid}-B-D", "IID": iid, "FROM_STID": "BASE", "TO_STID": "DEPOT", "TRANSIT_H": "1"}
+        for iid in ("POWER", "BOARD")
+    ]
+    tables["SimLabOffItemService"] = [
+        {"IID": "POWER", "STID": "DEPOT", "KIND": "CORRECTIVE", "STEP": step, "DURATION_H": "1", "TASK": "SERVICE"}
+        for step in ("DIAGNOSE", "TEST")
+    ] + [
+        {"IID": "BOARD", "STID": "DEPOT", "KIND": "PREVENTIVE", "STEP": step, "DURATION_H": "1", "TASK": "SERVICE"}
+        for step in ("DIAGNOSE", "SERVICE", "TEST")
+    ]
+    tables["SimLabItemPreventive"] = [{
+        "PMID": "BOARD-PM", "IID": "BOARD", "CLOCK": "OPERATING", "INTERVAL_H": "10",
+    }]
     return tables
 
 
@@ -180,6 +235,13 @@ def test_m3_supply_policy_modes_are_strict(changes, message):
     tables = m3_supply_tables()
     tables["SimLabSupplyPolicy"][0].update(changes)
     with pytest.raises(ModelError, match=message):
+        compile_model(tables)
+
+
+def test_m3_threshold_cannot_be_negative():
+    tables = m3_supply_tables()
+    tables["SimLabSupplyPolicy"][0]["REORDER_QTY"] = "-1"
+    with pytest.raises(ModelError, match="REORDER_QTY"):
         compile_model(tables)
 
 
@@ -288,6 +350,14 @@ def test_parent_off_item_allows_diagnose_and_test_but_forbids_service():
     power.update(FRT="0", AFFRT="1")
     tables["Item"].append({"IID": "BOARD", "TYPE": "SRU", "FRT": "100"})
     tables["MaterielStructure"].append({"MID": "BOARD", "MMID": "POWER", "QTYPM": "1"})
+    tables["SimLabMaintenanceRule"].append({
+        "RULEID": "BOARD-CM", "MID": "POWER", "IID": "BOARD", "STID": "DEPOT",
+        "KIND": "CORRECTIVE", "METHOD": "IN_PLACE",
+    })
+    tables["SimLabMaintenanceStep"].extend([
+        {"RULEID": "BOARD-CM", "STEP": "IN_PLACE", "DURATION_H": "1", "TASK": "SERVICE"},
+        {"RULEID": "BOARD-CM", "STEP": "TEST", "DURATION_H": "1", "TASK": "TEST"},
+    ])
     tables["SimLabOffItemService"] = [
         row for row in tables["SimLabOffItemService"] if row["STEP"] != "SERVICE"
     ]
@@ -307,6 +377,60 @@ def test_predictable_preventive_jobs_respect_per_replication_cap():
     tables["SimLabItemPreventive"][0]["INTERVAL_H"] = "1"
     with pytest.raises(ModelError, match="200000.*服务工单"):
         compile_model(tables)
+
+
+def test_large_preventive_initial_age_counts_as_one_initial_due_not_past_cycles():
+    tables = one_leaf_new_service_tables()
+    tables["Item"][0]["FRT"] = "0"
+    tables["Control"][0].update(SIMPE="2", RCINT="1")
+    tables["SimLabItemPreventive"][0].update(
+        CLOCK="OPERATING", INTERVAL_H="100", INITIAL_H="10000000"
+    )
+    compile_model(tables)
+
+
+def test_calendar_pm_stock_site_requires_mapping_and_preventive_offitem_steps():
+    tables = one_leaf_new_service_tables()
+    tables["SimLabRepairLocation"] = [
+        row for row in tables["SimLabRepairLocation"] if row["FROM_STID"] != "DEPOT"
+    ]
+    with pytest.raises(ModelError, match="CALENDAR.*POWER@DEPOT.*维修地点"):
+        compile_model(tables)
+
+    tables = one_leaf_new_service_tables()
+    tables["SimLabOffItemService"] = [
+        row for row in tables["SimLabOffItemService"] if row["KIND"] != "PREVENTIVE"
+    ]
+    with pytest.raises(ModelError, match="POWER@DEPOT/PREVENTIVE.*SERVICE"):
+        compile_model(tables)
+
+
+def test_every_deployed_part_has_corrective_coverage():
+    tables = one_leaf_new_service_tables()
+    tables["SimLabMaintenanceRule"] = [
+        row for row in tables["SimLabMaintenanceRule"] if row["KIND"] != "CORRECTIVE"
+    ]
+    tables["SimLabMaintenanceStep"] = [
+        row for row in tables["SimLabMaintenanceStep"] if row["RULEID"] != "POWER-CM"
+    ]
+    with pytest.raises(ModelError, match="VEHICLE/POWER@BASE.*CORRECTIVE"):
+        compile_model(tables)
+
+
+def test_pending_minimal_leaf_pm_method_is_compatible_after_parent_relocation():
+    tables = nested_pending_pm_tables()
+    with pytest.raises(ModelError, match="CHILD-PM-S.*DEPOT.*REPLACE"):
+        compile_model(tables)
+
+    destination = next(
+        row for row in tables["SimLabMaintenanceRule"] if row["RULEID"] == "CHILD-PM-D"
+    )
+    destination.update(METHOD="MIXED", REPLACE_P="0")
+    tables["SimLabMaintenanceStep"].extend([
+        {"RULEID": "CHILD-PM-D", "STEP": "REMOVE", "DURATION_H": "1", "TASK": "SERVICE"},
+        {"RULEID": "CHILD-PM-D", "STEP": "INSTALL", "DURATION_H": "1", "TASK": "SERVICE"},
+    ])
+    compile_model(tables)
 
 
 def test_service_resource_bundle_must_have_capacity_and_common_shift():

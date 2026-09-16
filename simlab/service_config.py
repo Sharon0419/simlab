@@ -32,11 +32,65 @@ def _shift_errors(table, index, station, task, task_resources, schedules, horizo
     return []
 
 
+def _draw_methods(rule):
+    """Methods a rule can select when a job is first created."""
+    if rule is None:
+        return set()
+    method = rule['METHOD']
+    if method != 'MIXED':
+        return {method}
+    # Missing probability is reported separately; keep later coverage checks
+    # conservative instead of raising before ModelError can aggregate it.
+    if rule['REPLACE_P'] == '':
+        return {'IN_PLACE', 'REPLACE'}
+    probability = float(rule['REPLACE_P'])
+    if probability == 0:
+        return {'IN_PLACE'}
+    if probability == 1:
+        return {'REPLACE'}
+    return {'IN_PLACE', 'REPLACE'}
+
+
+def _executable_methods(rule):
+    """Methods a destination rule has steps to execute after a previous draw."""
+    if rule is None:
+        return set()
+    return ({'IN_PLACE', 'REPLACE'} if rule['METHOD'] == 'MIXED'
+            else {rule['METHOD']})
+
+
+def _stock_quantity(row):
+    return int(float(row['ISTOH'] or row['STSIZ'] or 0))
+
+
+def _reachable_stock_sites(iid, canonical, point, locations):
+    """Sites where a loose physical item can be stocked or represented in transit."""
+    sites = {
+        row['STID'] for row in canonical.get('StockAllocation', [])
+        if row['POINT'] == point and row['IID'] == iid and _stock_quantity(row) > 0
+    }
+    sites.update(
+        destination for (item, _), destination in locations.items() if item == iid
+    )
+    routes = [row for row in canonical['SimLabSupplyRoute'] if row['IID'] == iid]
+    changed = True
+    while changed:
+        changed = False
+        for row in routes:
+            if row['FROM_STID'] in sites and row['TO_STID'] not in sites:
+                sites.add(row['TO_STID'])
+                changed = True
+    return sites
+
+
 def compile_service(tables, canonical, children, fleets, capacity, task_resources,
                     repairs, replacements, depot_processes, schedules, horizon):
     errors = []
     rules = canonical['SimLabMaintenanceRule']
     rule_by_id = {row['RULEID']: row for row in rules}
+    rule_by_context = {
+        (row['MID'], row['IID'], row['STID'], row['KIND']): row for row in rules
+    }
     context_seen = set()
     locations = {
         (row['IID'], row['FROM_STID']): row['REPAIR_STID']
@@ -136,6 +190,9 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
 
     preventive_by_iid = {}
     predictable_jobs = 0
+    point = canonical['Control'][0]['APID']
+    stock_rows = [row for row in canonical.get('StockAllocation', []) if row['POINT'] == point]
+    max_util = max((fleet['util'] for fleet in fleets), default=0)
     for index, row in enumerate(canonical['SimLabItemPreventive'], 1):
         iid = row['IID']
         if iid in preventive_by_iid:
@@ -156,7 +213,21 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
                     if child['iid'] == iid:
                         quantity += part['quantity'] * child['quantity']
             elapsed = horizon if row['CLOCK'] == 'CALENDAR' else horizon * fleet['util']
-            predictable_jobs += fleet['quantity'] * quantity * int((initial + elapsed) // interval)
+            cycles = (1 + int(elapsed // interval) if initial >= interval
+                      else int((initial + elapsed) // interval))
+            predictable_jobs += fleet['quantity'] * quantity * cycles
+        # Initial stock starts at zero PM-cycle age. Count each physical leaf once,
+        # including leaves contained in stocked parent assemblies.
+        stock_quantity = 0
+        for stock in stock_rows:
+            root_quantity = _stock_quantity(stock)
+            if stock['IID'] == iid:
+                stock_quantity += root_quantity
+            for child in children.get(stock['IID'], []):
+                if child['iid'] == iid:
+                    stock_quantity += root_quantity * child['quantity']
+        stock_elapsed = horizon if row['CLOCK'] == 'CALENDAR' else horizon * max_util
+        predictable_jobs += stock_quantity * int(stock_elapsed // interval)
     if predictable_jobs > 200000:
         errors.append('SimLabItemPreventive: 可预测的部件预防维修每轮最多生成 200000 份服务工单。')
 
@@ -175,6 +246,112 @@ def compile_service(tables, canonical, children, fleets, capacity, task_resource
             errors.append(
                 f'SimLabItemPreventive.{iid}: 缺少可到达作业地点 {mid}@{station} 的 PREVENTIVE 规则。'
             )
+
+    # A loose CALENDAR-clocked spare can become due in stock or while represented
+    # at a shipment destination. It needs the same explicit off-item path as a
+    # removed part. A leaf attached inside a stocked assembly remains attached,
+    # so it needs a parent/leaf rule at each reachable assembly site instead.
+    for iid, clock in preventive_by_iid.items():
+        if clock['CLOCK'] != 'CALENDAR':
+            continue
+        for station in sorted(_reachable_stock_sites(iid, canonical, point, locations)):
+            repair = locations.get((iid, station))
+            if repair is None:
+                errors.append(
+                    f'SimLabItemPreventive CALENDAR {iid}@{station}: '
+                    '库存或在途实物缺少显式维修地点映射。'
+                )
+                continue
+            missing = {'DIAGNOSE', 'SERVICE', 'TEST'} - off_steps.get(
+                (iid, repair, 'PREVENTIVE'), set())
+            if missing:
+                errors.append(
+                    f'SimLabOffItemService {iid}@{repair}/PREVENTIVE: '
+                    f'缺少 CALENDAR 库存件工序 {", ".join(sorted(missing))}。'
+                )
+        for parent, parts in children.items():
+            if not any(part['iid'] == iid for part in parts):
+                continue
+            for station in sorted(_reachable_stock_sites(parent, canonical, point, locations)):
+                if (parent, iid, station, 'PREVENTIVE') not in rule_by_context:
+                    errors.append(
+                        f'SimLabItemPreventive CALENDAR {parent}/{iid}@{station}: '
+                        '库存总成内叶子缺少 PREVENTIVE 规则。'
+                    )
+
+    def corrective_rule(mid, iid, station):
+        explicit = rule_by_context.get((mid, iid, station, 'CORRECTIVE'))
+        if explicit:
+            return explicit
+        if (mid, iid, station) in replacements:
+            return {'METHOD': 'REPLACE', 'REPLACE_P': ''}
+        return None
+
+    # Validate every fault context reached by deployed physical structures. A
+    # parent IN_PLACE path repairs children at home; a parent REPLACE path repairs
+    # still-attached children at the explicit parent destination.
+    for fleet in fleets:
+        for part in fleet['parts']:
+            parent_rule = corrective_rule(fleet['sid'], part['iid'], fleet['home'])
+            if parent_rule is None:
+                errors.append(
+                    f'SimLabMaintenanceRule: {fleet["sid"]}/{part["iid"]}@{fleet["home"]} '
+                    '缺少 CORRECTIVE 规则。'
+                )
+                continue
+            if part['iid'] not in children:
+                continue
+            parent_methods = _draw_methods(parent_rule)
+            child_sites = set()
+            if 'IN_PLACE' in parent_methods:
+                child_sites.add(fleet['home'])
+            if 'REPLACE' in parent_methods:
+                destination = locations.get((part['iid'], fleet['home']))
+                if destination:
+                    child_sites.add(destination)
+            for child in children[part['iid']]:
+                for station in child_sites:
+                    if corrective_rule(part['iid'], child['iid'], station) is None:
+                        errors.append(
+                            f'SimLabMaintenanceRule: {part["iid"]}/{child["iid"]}@{station} '
+                            '缺少 CORRECTIVE 规则。'
+                        )
+
+    # MINIMAL correction does not cover an already queued PM. If its parent can
+    # move while the child stays attached, the destination must execute every
+    # method that the source PM rule could already have selected.
+    minimal_items = {
+        row['IID'] for row in canonical.get('SimLabItemAging', []) if row['REPAIR'] == 'MINIMAL'
+    }
+    for fleet in fleets:
+        source = fleet['home']
+        for part in fleet['parts']:
+            parent_rule = corrective_rule(fleet['sid'], part['iid'], source)
+            if part['iid'] not in children or 'REPLACE' not in _draw_methods(parent_rule):
+                continue
+            destination = locations.get((part['iid'], source))
+            if not destination or destination == source:
+                continue
+            for child in children[part['iid']]:
+                iid = child['iid']
+                if iid not in minimal_items:
+                    continue
+                child_corrective = corrective_rule(part['iid'], iid, destination)
+                if 'IN_PLACE' not in _draw_methods(child_corrective):
+                    continue
+                source_pm = rule_by_context.get((part['iid'], iid, source, 'PREVENTIVE'))
+                if source_pm is None:
+                    continue
+                destination_pm = rule_by_context.get(
+                    (part['iid'], iid, destination, 'PREVENTIVE'))
+                selected = _draw_methods(source_pm)
+                executable = _executable_methods(destination_pm)
+                missing = selected - executable
+                if missing:
+                    errors.append(
+                        f'SimLabMaintenanceRule {source_pm["RULEID"]}: 父项换件到 {destination} 后，'
+                        f'目的站 PREVENTIVE 规则不能执行已抽维修方式 {", ".join(sorted(missing))}。'
+                    )
 
     # New and legacy rules may not silently compete for the same context.
     legacy_contexts = set(replacements)

@@ -91,6 +91,8 @@ TABLES['SimLabSupplyPolicy'] = [
     field('INTERVAL_H', 'Regular', '周期触发间隔', 'Floating point', unit='Hours'),
 ]
 TABLES['SimLabSupplyPolicy'][3]['constraints'] = 'Multiple choice: THRESHOLD, PERIODIC'
+TABLES['SimLabSupplyPolicy'][4]['constraints'] = 'Non-negative integer'
+TABLES['SimLabSupplyPolicy'][5]['constraints'] = 'Non-negative integer'
 
 TABLES['SimLabRepairLocation'] = [
     field('IID', 'Index', '部件标识', references='Item IID'),
