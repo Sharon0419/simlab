@@ -41,3 +41,12 @@ p['runs'].append({'id': uuid.uuid4().hex, 'name': '固定值守基线', 'status'
                   'source_revision': p['revision'], 'result': result})
 export_package(p, directory/'固定值守-含结果.simproj')
 print(f'Generated 2 duty packages; minimum_rate={result["mission"]["minimum_rate"]:.6f}')
+from simlab.m3_sample import m3_project
+p = m3_project()
+export_package(p, directory/'三级供应与维修方式-模型.simproj', False)
+result = simulate(p['tables'])
+p['runs'].append({'id': uuid.uuid4().hex, 'name': '三级供应演示', 'status': 'completed',
+                  'started': now(), 'snapshot': p['tables'].copy(), 'model_hash': model_hash(p['tables']),
+                  'source_revision': p['revision'], 'result': result})
+export_package(p, directory/'三级供应与维修方式-含结果.simproj')
+print(f'Generated 2 M3 packages; availability={result["availability"]:.6f}')

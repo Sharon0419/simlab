@@ -3,6 +3,12 @@ from ..schema import TABLES, table_label, field_label
 from ..validation import choices
 
 VALUE_LABELS = {
+    'M3': '三级供应与维修方式', 'THRESHOLD': '临界库存触发', 'PERIODIC': '指定周期调运',
+    'EXPONENTIAL': '指数分布',
+    'CORRECTIVE': '修复性维修', 'PREVENTIVE': '预防性维修',
+    'IN_PLACE': '原位维修', 'REPLACE': '换件维修', 'MIXED': '按比例选择',
+    'OPERATING': '有效运行小时', 'DIAGNOSE': '检测', 'REMOVE': '拆卸',
+    'INSTALL': '安装', 'TEST': '测试', 'SERVICE': '拆下件维修',
     'PERFECT': '修复如新', 'MINIMAL': '最小修复',
     'Y': '是', 'N': '否', '<EXP>': '指数分布', '<POISSON>': '泊松分布',
     'ENABLER': '使能资源', 'SPECIAL': '专用资源', 'STANDARD': '标准资源',

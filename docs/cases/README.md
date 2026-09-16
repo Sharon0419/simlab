@@ -1,3 +1,7 @@
+# M3三级供应与维修方式（v0.10）
+
+[临界库存调运](2026-09-16-m3/评估报告.md)与[周期调运](2026-09-16-m3-periodic/评估报告.md)各1000轮，合成4架飞机案例。输入、simproj、六类全轮CSV及数量守恒验证同目录。复现：`tools/run_m3_case.py`，周期方案加`--periodic --output docs/cases/2026-09-16-m3-periodic`；EXE重放加`--exe dist/SimLab/SimLab.exe`。演示结果不代表实际策略优劣结论。
+
 # 新增M2老化案例
 
 [飞机部件老化：修复如新与最小修复](2026-09-15-aircraft-aging/评估报告.md)，各1000轮，保留日历维修与小时检查。

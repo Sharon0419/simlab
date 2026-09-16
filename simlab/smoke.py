@@ -428,6 +428,8 @@ def run(directory):
     export_package(window.project,directory/'aging.simproj')
     assert import_package(directory/'aging.simproj')['runs'][-1]['result']==age_run['result']
     output['checks']+=['aging input','aging worker','repair age updates','aging results and CSV','format9 roundtrip']
+    from .m3_smoke import check_m3
+    output['checks'] += check_m3(window, directory, failures)
     window.close()
     app.processEvents()
     sys.excepthook = previous_hook
